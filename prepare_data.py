@@ -1,4 +1,7 @@
 import pandas as pd
+import itertools
+from sklearn.preprocessing import StandardScaler
+from soft_impute import SoftImpute
 
 applications = pd.read_csv('application_train.csv', index_col="SK_ID_CURR")
 apps_clean = applications.copy()
@@ -38,12 +41,24 @@ for cat_col in cat_cols:
     cat_labels[cat_col] = apps_clean[cat_col].unique()
     apps_clean[cat_col] = pd.Categorical(apps_clean[cat_col], categories=cat_labels[cat_col])
 
-# current home information
-# TODO: pick one statistic for each home info category
+# use smart imputation and pca on current home information
+stat_suffixes = ['_AVG', '_MEDI', '_MODE']
+stat_cols = [col[:-4] for col in applications.columns[applications.columns.str.contains(stat_suffixes[0])]]
+all_stat_cols = [st + sf for st, sf in itertools.product(stat_cols, stat_suffixes)]
+
+X = applications[all_stat_cols].values
+
+clf = SoftImpute()
+clf.fit(X)
+imputed = clf.predict(X)
+
+apps_clean[all_stat_cols] = imputed
+
+# TODO: replace categorical home information with one hot encoding
 
 # external data source
 # TODO: impute with quantile of other scores
-ext_src_cols = ['EXT_SOURCE_' + str(i + 1) for i in range(3)]
+ext_src_cols = ['EXT_SOURCE_' + str(i) for i in range(1, 4)]
 
 # age of car if owned
 # TODO: impute car age with average, if client owns a car
@@ -53,3 +68,12 @@ ext_src_cols = ['EXT_SOURCE_' + str(i + 1) for i in range(3)]
 
 # annuity amount
 # TODO: infer from amt_credit and amt_goods_price
+
+# scale columns with numerical data
+num_cols = []
+
+apps_clean[num_cols] = apps_clean[num_cols].fillna(apps_clean[num_cols].mean())
+
+scaler = StandardScaler()
+apps_clean[num_cols] = scaler.fit_transform(apps_clean[num_cols])
+# just use scaler.fit on out-of-sample data
