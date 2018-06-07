@@ -1,7 +1,4 @@
 import pandas as pd
-import numpy as np
-import seaborn as sns
-import matplotlib.pyplot as plt
 
 applications = pd.read_csv('application_train.csv', index_col="SK_ID_CURR")
 apps_clean = applications.copy()
@@ -46,6 +43,7 @@ for cat_col in cat_cols:
 
 # external data source
 # TODO: impute with quantile of other scores
+ext_src_cols = ['EXT_SOURCE_' + str(i + 1) for i in range(3)]
 
 # age of car if owned
 # TODO: impute car age with average, if client owns a car
