@@ -2,6 +2,7 @@ import pandas as pd
 import itertools
 from sklearn.preprocessing import StandardScaler
 from soft_impute import SoftImpute
+from sklearn.decomposition import PCA
 
 applications = pd.read_csv('application_train.csv', index_col="SK_ID_CURR")
 apps_clean = applications.copy()
@@ -53,6 +54,25 @@ clf.fit(X)
 imputed = clf.predict(X)
 
 apps_clean[all_stat_cols] = imputed
+
+stat_cat_cols = ['FONDKAPREMONT_MODE',
+                 'HOUSETYPE_MODE',
+                 'WALLSMATERIAL_MODE',
+                 'EMERGENCYSTATE_MODE']
+
+full_home_stats = apps_clean[all_stat_cols].join(pd.get_dummies(apps_clean[stat_cat_cols]))
+full_home_stats.head().T
+
+# TODO: may want to set a selectable threshold for explained variance
+pca_components = 15
+cols = ['CURR_HOME_' + str(pca_col) for pca_col in range(pca_components)]
+st_pca = PCA(n_components=pca_components)
+
+home_stats_pca = pd.DataFrame(st_pca.fit_transform(full_home_stats), index=full_home_stats.index, columns=cols)
+
+apps_clean = apps_clean.join(home_stats_pca)
+apps_clean = apps_clean.drop(all_stat_cols, axis=1)
+apps_clean = apps_clean.drop(stat_cat_cols, axis=1)
 
 # TODO: replace categorical home information with one hot encoding
 
