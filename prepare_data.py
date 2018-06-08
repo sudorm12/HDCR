@@ -3,9 +3,12 @@ import itertools
 from sklearn.preprocessing import StandardScaler
 from soft_impute import SoftImpute
 from sklearn.decomposition import PCA
+from sklearn.linear_model import LinearRegression
 
 applications = pd.read_csv('application_train.csv', index_col="SK_ID_CURR")
 apps_clean = applications.copy()
+
+# TODO: track rows with high number of na values to compare at end
 
 # change y/n columns to boolean
 yn_map = {'Y': 1,
@@ -69,25 +72,55 @@ cols = ['CURR_HOME_' + str(pca_col) for pca_col in range(pca_components)]
 st_pca = PCA(n_components=pca_components)
 
 home_stats_pca = pd.DataFrame(st_pca.fit_transform(full_home_stats), index=full_home_stats.index, columns=cols)
+# use st_pca.fit on out of sample data
 
 apps_clean = apps_clean.join(home_stats_pca)
 apps_clean = apps_clean.drop(all_stat_cols, axis=1)
 apps_clean = apps_clean.drop(stat_cat_cols, axis=1)
 
-# TODO: replace categorical home information with one hot encoding
-
 # external data source
-# TODO: impute with quantile of other scores
 ext_src_cols = ['EXT_SOURCE_' + str(i) for i in range(1, 4)]
 
 # age of car if owned
 # TODO: impute car age with average, if client owns a car
 
-# credit bureau requests
-# TODO: impute all with zero, except past year with one
+# impute all credit bureau requests with zero, except past year with one
+app_credit_cols = apps_clean.columns[apps_clean.columns.str.contains('AMT_REQ_CREDIT_BUREAU')]
+apps_clean['AMT_REQ_CREDIT_BUREAU_YEAR'] = apps_clean['AMT_REQ_CREDIT_BUREAU_YEAR'].fillna(1)
+apps_clean[app_credit_cols] = apps_clean[app_credit_cols].fillna(0)
 
-# annuity amount
-# TODO: infer from amt_credit and amt_goods_price
+# infer goods price and annuity amount from credit using linear regression
+# TODO: clean up to allow fit on out of sample data
+amt_lr_rows = apps_clean['AMT_GOODS_PRICE'].notna()
+x = apps_clean.loc[amt_lr_rows]['AMT_CREDIT']
+y = apps_clean.loc[amt_lr_rows]['AMT_GOODS_PRICE']
+
+lr = LinearRegression()
+lr.fit(x.values.reshape(-1, 1), y)
+
+amt_fill_rows = apps_clean['AMT_GOODS_PRICE'].isna()
+x = apps_clean.loc[amt_fill_rows]['AMT_CREDIT']
+y = lr.predict(x.values.reshape(-1, 1))
+
+apps_clean.loc[amt_fill_rows, 'AMT_GOODS_PRICE'] = y
+
+amt_lr_rows = apps_clean['AMT_ANNUITY'].notna()
+x = apps_clean.loc[amt_lr_rows][['AMT_CREDIT', 'AMT_GOODS_PRICE']]
+y = apps_clean.loc[amt_lr_rows]['AMT_ANNUITY']
+
+lr = LinearRegression()
+lr.fit(x.values, y)
+
+amt_fill_rows = apps_clean['AMT_ANNUITY'].isna()
+x = apps_clean.loc[amt_fill_rows][['AMT_CREDIT', 'AMT_GOODS_PRICE']]
+y = lr.predict(x.values)
+
+apps_clean.loc[amt_fill_rows, 'AMT_ANNUITY'] = y
+
+# basic mean imputation of remaining na values
+mean_imp_cols = apps_clean.columns[apps_clean.isna().sum(axis=0) > 0]
+mean_imp_means = apps_clean[mean_imp_cols].mean()
+apps_clean[mean_imp_cols] = apps_clean[mean_imp_cols].fillna(mean_imp_means)
 
 # scale columns with numerical data
 num_cols = []
@@ -96,4 +129,4 @@ apps_clean[num_cols] = apps_clean[num_cols].fillna(apps_clean[num_cols].mean())
 
 scaler = StandardScaler()
 apps_clean[num_cols] = scaler.fit_transform(apps_clean[num_cols])
-# just use scaler.fit on out-of-sample data
+# use scaler.fit on out-of-sample data
