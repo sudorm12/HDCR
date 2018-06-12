@@ -125,3 +125,25 @@ apps_clean[num_cols] = apps_clean[num_cols].fillna(apps_clean[num_cols].mean())
 scaler = StandardScaler()
 apps_clean[num_cols] = scaler.fit_transform(apps_clean[num_cols])
 # use scaler.fit on out-of-sample data
+
+# read in credit bureau data
+bureau = pd.read_csv('bureau.csv')
+bureau_clean = bureau.copy()
+
+# convert categorical columns to Categorical dtype
+cat_cols = ['CREDIT_ACTIVE',
+            'CREDIT_CURRENCY',
+            'CREDIT_TYPE']
+
+# TODO: find a nicer way to share the cat_labels dict
+cat_labels = {}
+
+for cat_col in cat_cols:
+    cat_labels[cat_col] = bureau_clean[cat_col].unique()
+    bureau_clean[cat_col] = pd.Categorical(bureau_clean[cat_col], categories=cat_labels[cat_col])
+
+# count the number of each type of loan for each applicant
+credit_types = bureau_clean.groupby(['SK_ID_CURR', 'CREDIT_TYPE']).size().unstack().fillna(0)
+
+# sum up the numerical data for each applicant for a simple summary
+bureau_summary = bureau.groupby('SK_ID_CURR').sum()
