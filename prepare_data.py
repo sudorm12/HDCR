@@ -19,7 +19,7 @@ yn_cols = ['FLAG_OWN_CAR',
 
 apps_clean[yn_cols] = apps_clean[yn_cols].replace(yn_map)
 
-# identify encoded columns, change to categorical
+# identify encoded columns, fill na with unspecified and change to categorical
 cat_cols = ['NAME_CONTRACT_TYPE',
             'CODE_GENDER',
             'NAME_TYPE_SUITE',
@@ -39,8 +39,8 @@ cat_cols = ['NAME_CONTRACT_TYPE',
 cat_na_count = applications[cat_cols].isna().sum(axis=0)
 cat_na_map = {cat: 'Unspecified' for cat in cat_na_count[cat_na_count > 0].index}
 apps_clean = apps_clean.fillna(value=cat_na_map)
-cat_labels = {}
 
+cat_labels = {}
 for cat_col in cat_cols:
     cat_labels[cat_col] = apps_clean[cat_col].unique()
     apps_clean[cat_col] = pd.Categorical(apps_clean[cat_col], categories=cat_labels[cat_col])
@@ -54,17 +54,15 @@ X = applications[all_stat_cols].values
 
 clf = SoftImpute()
 clf.fit(X)
-imputed = clf.predict(X)
+apps_clean[all_stat_cols] = clf.predict(X)
 
-apps_clean[all_stat_cols] = imputed
-
+# convert categorical home info columns to one-hot encoded
 stat_cat_cols = ['FONDKAPREMONT_MODE',
                  'HOUSETYPE_MODE',
                  'WALLSMATERIAL_MODE',
                  'EMERGENCYSTATE_MODE']
 
 full_home_stats = apps_clean[all_stat_cols].join(pd.get_dummies(apps_clean[stat_cat_cols]))
-full_home_stats.head().T
 
 # TODO: may want to set a selectable threshold for explained variance
 pca_components = 15
@@ -77,9 +75,6 @@ home_stats_pca = pd.DataFrame(st_pca.fit_transform(full_home_stats), index=full_
 apps_clean = apps_clean.join(home_stats_pca)
 apps_clean = apps_clean.drop(all_stat_cols, axis=1)
 apps_clean = apps_clean.drop(stat_cat_cols, axis=1)
-
-# external data source
-ext_src_cols = ['EXT_SOURCE_' + str(i) for i in range(1, 4)]
 
 # age of car if owned
 # TODO: impute car age with average, if client owns a car
