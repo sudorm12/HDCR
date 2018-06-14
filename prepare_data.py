@@ -142,8 +142,50 @@ for cat_col in cat_cols:
     cat_labels[cat_col] = bureau_clean[cat_col].unique()
     bureau_clean[cat_col] = pd.Categorical(bureau_clean[cat_col], categories=cat_labels[cat_col])
 
+# sum up the numerical data for each applicant for a simple summary
+bureau_num_summary = bureau.groupby('SK_ID_CURR').sum()
+
 # count the number of each type of loan for each applicant
 credit_types = bureau_clean.groupby(['SK_ID_CURR', 'CREDIT_TYPE']).size().unstack().fillna(0)
 
-# sum up the numerical data for each applicant for a simple summary
-bureau_summary = bureau.groupby('SK_ID_CURR').sum()
+# count the number of open and closed loans for each applicant
+credit_active = bureau_clean.groupby(['SK_ID_CURR', 'CREDIT_ACTIVE']).size().unstack().fillna(0)
+
+# combine the summary dataframes
+bureau_summary = bureau_num_summary.join([credit_active, credit_types]).fillna(0)
+
+previous_application = pd.read_csv('previous_application.csv')
+previous_clean = previous_application.copy()
+
+# convert categorical columns to Categorical dtype
+cat_cols = ['NAME_CONTRACT_TYPE',
+            'WEEKDAY_APPR_PROCESS_START',
+            'NAME_CASH_LOAN_PURPOSE',
+            'NAME_CONTRACT_STATUS',
+            'NAME_PAYMENT_TYPE',
+            'CODE_REJECT_REASON',
+            'NAME_TYPE_SUITE',
+            'NAME_CLIENT_TYPE',
+            'NAME_GOODS_CATEGORY',
+            'NAME_PORTFOLIO',
+            'NAME_PRODUCT_TYPE',
+            'CHANNEL_TYPE',
+            'NAME_SELLER_INDUSTRY',
+            'NAME_YIELD_GROUP',
+            'PRODUCT_COMBINATION']
+
+cat_na_count = previous_clean[cat_cols].isna().sum(axis=0)
+
+cat_na_map = {cat: 'Unspecified' for cat in cat_na_count[cat_na_count > 0].index}
+previous_clean = previous_clean.fillna(value=cat_na_map)
+
+cat_labels = {}
+
+for cat_col in cat_cols:
+    cat_labels[cat_col] = previous_clean[cat_col].unique()
+    previous_clean[cat_col] = pd.Categorical(previous_clean[cat_col], categories=cat_labels[cat_col])
+
+# create numerical and categorical summaries and join them together
+prev_app_num_summary = previous_clean.groupby('SK_ID_CURR').sum()
+prev_app_cat_summary = pd.get_dummies(previous_clean[cat_cols + ['SK_ID_CURR']]).groupby('SK_ID_CURR').sum()
+prev_app_summary = prev_app_num_summary.join(prev_app_cat_summary)
