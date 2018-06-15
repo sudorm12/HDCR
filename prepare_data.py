@@ -6,7 +6,7 @@ from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
 
 class HCDALoader:
-    def init(self):
+    def __init__(self):
         self._curr_home_imputer = SoftImpute()
         self._amt_gp_lr = LinearRegression()
         self._amt_an_lr = LinearRegression()
@@ -115,11 +115,12 @@ class HCDALoader:
 
         # scale columns with numerical data
         # TODO: find a way to automatically detect numeric columns
+        # df.select_dtypes
         num_cols = []
 
-        apps_clean[num_cols] = apps_clean[num_cols].fillna(apps_clean[num_cols].mean())
+        #apps_clean[num_cols] = apps_clean[num_cols].fillna(apps_clean[num_cols].mean())
 
-        apps_clean[num_cols] = self._num_scaler.fit_transform(apps_clean[num_cols])
+        #apps_clean[num_cols] = self._num_scaler.fit_transform(apps_clean[num_cols])
         # use scaler.fit on out-of-sample data
 
         return apps_clean
