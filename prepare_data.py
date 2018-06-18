@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import itertools
 from sklearn.preprocessing import StandardScaler
 from soft_impute import SoftImpute
@@ -6,16 +7,33 @@ from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
 
 class HCDALoader:
-    def __init__(self):
+    def __init__(self, data_dir='data'):
         self._curr_home_imputer = SoftImpute()
         self._amt_gp_lr = LinearRegression()
         self._amt_an_lr = LinearRegression()
         self._st_pca = None
         self._num_scaler = StandardScaler()
 
-    def read_applications_train(self):
-        applications = pd.read_csv('application_train.csv', index_col="SK_ID_CURR")
-        apps_clean = applications.copy()
+        self._applications = pd.read_csv('{}/application_train.csv'.format(data_dir), index_col="SK_ID_CURR")
+        self._bureau_summary = self.read_bureau()
+        self._previous_summary = self.read_previous_application()
+
+    def load_train(self):
+        # load each of the available data tables
+        applications_train = self.read_applications_train()
+        
+        # join the dataframes together and fill nas with zeros
+        joined = applications_train.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary, rsuffix='_PREVIOUS')
+        full_data = joined.combine_first(joined.select_dtypes(include=[np.number]).fillna(0))
+
+        # TODO: scale numeric columns before returning
+        return full_data
+
+    def read_applications_train(self, split_index=None):
+        if split_index is None:
+            apps_clean = self._applications.copy()
+        else:
+            apps_clean = self._applications.iloc[split_index].copy()
 
         # TODO: track rows with high number of na values to compare at end
 
@@ -46,10 +64,10 @@ class HCDALoader:
 
         # use smart imputation and pca on current home information
         stat_suffixes = ['_AVG', '_MEDI', '_MODE']
-        stat_cols = [col[:-4] for col in applications.columns[applications.columns.str.contains(stat_suffixes[0])]]
+        stat_cols = [col[:-4] for col in apps_clean.columns[apps_clean.columns.str.contains(stat_suffixes[0])]]
         all_stat_cols = [st + sf for st, sf in itertools.product(stat_cols, stat_suffixes)]
 
-        X = applications[all_stat_cols].values
+        X = apps_clean[all_stat_cols].values
 
         self._curr_home_imputer.fit(X)
         apps_clean[all_stat_cols] = self._curr_home_imputer.predict(X)
@@ -127,7 +145,7 @@ class HCDALoader:
 
     def read_bureau(self):
         # read in credit bureau data
-        bureau = pd.read_csv('bureau.csv')
+        bureau = pd.read_csv('{}/bureau.csv'.format(data_dir))
         bureau_clean = bureau.copy()
 
         # convert categorical columns to Categorical dtype
@@ -152,7 +170,7 @@ class HCDALoader:
         return bureau_summary
 
     def read_previous_application(self):
-        previous_application = pd.read_csv('previous_application.csv')
+        previous_application = pd.read_csv('{}/previous_application.csv'.format(dat_dir))
         previous_clean = previous_application.copy()
 
         # convert categorical columns to Categorical dtype
@@ -179,6 +197,9 @@ class HCDALoader:
         prev_app_cat_summary = pd.get_dummies(previous_clean[cat_cols + ['SK_ID_CURR']]).groupby('SK_ID_CURR').sum()
         prev_app_summary = prev_app_num_summary.join(prev_app_cat_summary)
         return prev_app_summary
+
+    def applications_train_index(self):
+        return self._applications.index
 
     def _yn_cols_to_boolean(self, df, cols):
         yn_map = {'Y': 1,
