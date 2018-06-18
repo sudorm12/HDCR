@@ -8,6 +8,7 @@ from sklearn.linear_model import LinearRegression
 
 class HCDALoader:
     def __init__(self, data_dir='data'):
+        self._data_dir = data_dir
         self._curr_home_imputer = SoftImpute()
         self._amt_gp_lr = LinearRegression()
         self._amt_an_lr = LinearRegression()
@@ -145,7 +146,7 @@ class HCDALoader:
 
     def read_bureau(self):
         # read in credit bureau data
-        bureau = pd.read_csv('{}/bureau.csv'.format(data_dir))
+        bureau = pd.read_csv('{}/bureau.csv'.format(self._data_dir))
         bureau_clean = bureau.copy()
 
         # convert categorical columns to Categorical dtype
@@ -170,7 +171,7 @@ class HCDALoader:
         return bureau_summary
 
     def read_previous_application(self):
-        previous_application = pd.read_csv('{}/previous_application.csv'.format(dat_dir))
+        previous_application = pd.read_csv('{}/previous_application.csv'.format(self._data_dir))
         previous_clean = previous_application.copy()
 
         # convert categorical columns to Categorical dtype
