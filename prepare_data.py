@@ -6,6 +6,7 @@ from soft_impute import SoftImpute
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
 
+
 class HCDALoader:
     def __init__(self, data_dir='data'):
         self._data_dir = data_dir
@@ -42,7 +43,7 @@ class HCDALoader:
         yn_cols = ['FLAG_OWN_CAR', 
                    'FLAG_OWN_REALTY']
 
-        apps_clean[yn_cols] = self._yn_cols_to_boolean(apps_clean, yn_cols) #apps_clean[yn_cols].replace(yn_map)
+        apps_clean[yn_cols] = self._yn_cols_to_boolean(apps_clean, yn_cols)
 
         # identify encoded columns, fill na with unspecified and change to categorical
         cat_cols = ['NAME_CONTRACT_TYPE',
@@ -86,8 +87,10 @@ class HCDALoader:
         cols = ['CURR_HOME_' + str(pca_col) for pca_col in range(pca_components)]
         self._st_pca = PCA(n_components=pca_components)
 
-        home_stats_pca = pd.DataFrame(self._st_pca.fit_transform(full_home_stats), index=full_home_stats.index, columns=cols)
-        # use self._st_pca.fit on out of sample data
+        home_stats_pca = pd.DataFrame(self._st_pca.fit_transform(full_home_stats),
+                                      index=full_home_stats.index,
+                                      columns=cols)
+        # use self._st_pca.transform on out of sample data
 
         apps_clean = apps_clean.join(home_stats_pca)
         apps_clean = apps_clean.drop(all_stat_cols, axis=1)
@@ -102,7 +105,6 @@ class HCDALoader:
         apps_clean[app_credit_cols] = apps_clean[app_credit_cols].fillna(0)
 
         # infer goods price and annuity amount from credit using linear regression
-        # TODO: clean up to allow fit on out of sample data
         amt_lr_rows = apps_clean['AMT_GOODS_PRICE'].notna()
         x = apps_clean.loc[amt_lr_rows]['AMT_CREDIT']
         y = apps_clean.loc[amt_lr_rows]['AMT_GOODS_PRICE']
@@ -137,9 +139,99 @@ class HCDALoader:
         # df.select_dtypes
         num_cols = []
 
-        #apps_clean[num_cols] = apps_clean[num_cols].fillna(apps_clean[num_cols].mean())
+        # apps_clean[num_cols] = apps_clean[num_cols].fillna(apps_clean[num_cols].mean())
 
-        #apps_clean[num_cols] = self._num_scaler.fit_transform(apps_clean[num_cols])
+        # apps_clean[num_cols] = self._num_scaler.fit_transform(apps_clean[num_cols])
+        # use scaler.fit on out-of-sample data
+
+        return apps_clean
+
+    def read_applications_val(self, split_index):
+        apps_clean = self._applications.iloc[split_index].copy()
+
+        # change y/n columns to boolean
+        yn_cols = ['FLAG_OWN_CAR',
+                   'FLAG_OWN_REALTY']
+
+        apps_clean[yn_cols] = self._yn_cols_to_boolean(apps_clean, yn_cols)
+
+        # identify encoded columns, fill na with unspecified and change to categorical
+        cat_cols = ['NAME_CONTRACT_TYPE',
+                    'CODE_GENDER',
+                    'NAME_TYPE_SUITE',
+                    'NAME_INCOME_TYPE',
+                    'NAME_EDUCATION_TYPE',
+                    'NAME_FAMILY_STATUS',
+                    'NAME_HOUSING_TYPE',
+                    'OCCUPATION_TYPE',
+                    'WEEKDAY_APPR_PROCESS_START',
+                    'ORGANIZATION_TYPE',
+                    'FONDKAPREMONT_MODE',
+                    'HOUSETYPE_MODE',
+                    'TOTALAREA_MODE',
+                    'WALLSMATERIAL_MODE',
+                    'EMERGENCYSTATE_MODE']
+
+        apps_clean = self._cat_data(apps_clean, cat_cols)
+
+        # use smart imputation and pca on current home information
+        stat_suffixes = ['_AVG', '_MEDI', '_MODE']
+        stat_cols = [col[:-4] for col in apps_clean.columns[apps_clean.columns.str.contains(stat_suffixes[0])]]
+        all_stat_cols = [st + sf for st, sf in itertools.product(stat_cols, stat_suffixes)]
+
+        X = apps_clean[all_stat_cols].values
+
+        apps_clean[all_stat_cols] = self._curr_home_imputer.predict(X)
+
+        # convert categorical home info columns to one-hot encoded
+        stat_cat_cols = ['FONDKAPREMONT_MODE',
+                         'HOUSETYPE_MODE',
+                         'WALLSMATERIAL_MODE',
+                         'EMERGENCYSTATE_MODE']
+
+        full_home_stats = apps_clean[all_stat_cols].join(pd.get_dummies(apps_clean[stat_cat_cols]))
+        pca_components = 15
+        cols = ['CURR_HOME_' + str(pca_col) for pca_col in range(pca_components)]
+
+        home_stats_pca = pd.DataFrame(self._st_pca.transform(full_home_stats),
+                                      index=full_home_stats.index,
+                                      columns=cols)
+
+        apps_clean = apps_clean.join(home_stats_pca)
+        apps_clean = apps_clean.drop(all_stat_cols, axis=1)
+        apps_clean = apps_clean.drop(stat_cat_cols, axis=1)
+
+        # impute all credit bureau requests with zero, except past year with one
+        app_credit_cols = apps_clean.columns[apps_clean.columns.str.contains('AMT_REQ_CREDIT_BUREAU')]
+        apps_clean['AMT_REQ_CREDIT_BUREAU_YEAR'] = apps_clean['AMT_REQ_CREDIT_BUREAU_YEAR'].fillna(1)
+        apps_clean[app_credit_cols] = apps_clean[app_credit_cols].fillna(0)
+
+        # infer goods price and annuity amount from credit using linear regression
+        amt_fill_rows = apps_clean['AMT_GOODS_PRICE'].isna()
+        x = apps_clean.loc[amt_fill_rows]['AMT_CREDIT']
+        y = self._amt_gp_lr.predict(x.values.reshape(-1, 1))
+
+        apps_clean.loc[amt_fill_rows, 'AMT_GOODS_PRICE'] = y
+
+        amt_fill_rows = apps_clean['AMT_ANNUITY'].isna()
+        x = apps_clean.loc[amt_fill_rows][['AMT_CREDIT', 'AMT_GOODS_PRICE']]
+        y = self._amt_an_lr.predict(x.values)
+
+        apps_clean.loc[amt_fill_rows, 'AMT_ANNUITY'] = y
+
+        # basic mean imputation of remaining na values
+        mean_imp_cols = apps_clean.columns[apps_clean.isna().sum(axis=0) > 0]
+        mean_imp_means = apps_clean[mean_imp_cols].mean()
+        apps_clean[mean_imp_cols] = apps_clean[mean_imp_cols].fillna(mean_imp_means)
+
+        # scale columns with numerical data
+        # TODO: find a way to automatically detect numeric columns
+        # df.select_dtypes
+        num_cols = []
+
+        # apps_clean[num_cols] = apps_clean[num_cols].fillna(apps_clean[num_cols].mean())
+
+        # apps_clean[num_cols] = self._num_scaler.fit_transform(apps_clean[num_cols])
         # use scaler.fit on out-of-sample data
 
         return apps_clean
