@@ -20,16 +20,22 @@ class HCDALoader:
         self._bureau_summary = self.read_bureau()
         self._previous_summary = self.read_previous_application()
 
-    def load_train(self):
+    def load_train_val(self, train_index, val_index):
         # load each of the available data tables
-        applications_train = self.read_applications_train()
+        applications_train = self.read_applications_train(train_index)
+        applications_val = self.read_applications_train(val_index)
         
         # join the dataframes together and fill nas with zeros
-        joined = applications_train.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary, rsuffix='_PREVIOUS')
-        full_data = joined.combine_first(joined.select_dtypes(include=[np.number]).fillna(0))
+        joined_train = applications_train.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
+                                                                                             rsuffix='_PREVIOUS')
+        full_data_train = joined_train.combine_first(joined_train.select_dtypes(include=[np.number]).fillna(0))
+
+        joined_val = applications_val.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
+                                                                                         rsuffix='_PREVIOUS')
+        full_data_val = joined_val.combine_first(joined_val.select_dtypes(include=[np.number]).fillna(0))
 
         # TODO: scale numeric columns before returning
-        return full_data
+        return full_data_train, full_data_val
 
     def read_applications_train(self, split_index=None):
         if split_index is None:
@@ -63,6 +69,7 @@ class HCDALoader:
                     'EMERGENCYSTATE_MODE']
 
         apps_clean = self._cat_data(apps_clean, cat_cols)
+        # TODO: change categorical data to dummy columns
 
         # use smart imputation and pca on current home information
         stat_suffixes = ['_AVG', '_MEDI', '_MODE']
@@ -296,7 +303,7 @@ class HCDALoader:
 
     def _yn_cols_to_boolean(self, df, cols):
         yn_map = {'Y': 1,
-                'N': 0}
+                  'N': 0}
         return df[cols].replace(yn_map)
 
     def _cat_data(self, df, cols):
