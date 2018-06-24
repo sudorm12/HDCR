@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import itertools
+import logging
 from sklearn.preprocessing import StandardScaler
 from soft_impute import SoftImpute
 from sklearn.decomposition import PCA
@@ -16,11 +17,9 @@ class HCDALoader:
         self._st_pca = None
         self._num_scaler = StandardScaler()
 
+        logging.debug('Reading application_train.csv...')
         self._applications = pd.read_csv('{}/application_train.csv'.format(data_dir), index_col="SK_ID_CURR")
-        # TODO: add logging message for reading csv file
-        # import logging
-        # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-        # logging.debug('This is a log message.')
+        logging.debug('Finished reading application_train.csv')
 
         self._bureau_summary = self.read_bureau()
         self._previous_summary = self.read_previous_application()
@@ -57,7 +56,8 @@ class HCDALoader:
         else:
             apps_clean = self._applications.iloc[split_index].copy()
 
-        # TODO: track rows with high number of na values to compare at end
+        # track rows with high number of na values
+        apps_clean['NA_COLS'] = apps_clean.isna().sum(axis=1)
 
         # change y/n columns to boolean
         yn_cols = ['FLAG_OWN_CAR', 
@@ -66,40 +66,31 @@ class HCDALoader:
         apps_clean[yn_cols] = self._yn_cols_to_boolean(apps_clean, yn_cols)
 
         # identify encoded columns, fill na with unspecified and change to categorical
-        apps_clean = self._cat_data(apps_clean)
-        # TODO: change categorical data to dummy columns
+        apps_clean = self._cat_data_dummies(apps_clean)
 
         # use smart imputation and pca on current home information
         stat_suffixes = ['_AVG', '_MEDI', '_MODE']
-        stat_cols = [col[:-4] for col in apps_clean.columns[apps_clean.columns.str.contains(stat_suffixes[0])]]
-        all_stat_cols = [st + sf for st, sf in itertools.product(stat_cols, stat_suffixes)]
+        stat_cols = [col for col in apps_clean.columns[apps_clean.columns.str.contains('|'.join(stat_suffixes))]]
 
-        X = apps_clean[all_stat_cols].values
+        X = apps_clean[stat_cols].values
 
         self._curr_home_imputer.fit(X)
-        apps_clean[all_stat_cols] = self._curr_home_imputer.predict(X)
+        apps_clean[stat_cols] = self._curr_home_imputer.predict(X)
 
-        # convert categorical home info columns to one-hot encoded
-        stat_cat_cols = ['FONDKAPREMONT_MODE',
-                         'HOUSETYPE_MODE',
-                         'WALLSMATERIAL_MODE',
-                         'EMERGENCYSTATE_MODE']
-
-        full_home_stats = apps_clean[all_stat_cols].join(pd.get_dummies(apps_clean[stat_cat_cols]))
+        full_home_stats = apps_clean[stat_cols]
 
         # TODO: may want to set a selectable threshold for explained variance
         pca_components = 15
-        cols = ['CURR_HOME_' + str(pca_col) for pca_col in range(pca_components)]
+        pca_cols = ['CURR_HOME_' + str(pca_col) for pca_col in range(pca_components)]
         self._st_pca = PCA(n_components=pca_components)
 
         home_stats_pca = pd.DataFrame(self._st_pca.fit_transform(full_home_stats),
                                       index=full_home_stats.index,
-                                      columns=cols)
+                                      columns=pca_cols)
         # use self._st_pca.transform on out of sample data
 
         apps_clean = apps_clean.join(home_stats_pca)
-        apps_clean = apps_clean.drop(all_stat_cols, axis=1)
-        apps_clean = apps_clean.drop(stat_cat_cols, axis=1)
+        apps_clean = apps_clean.drop(stat_cols, axis=1)
 
         # age of car if owned
         # TODO: impute car age with average, if client owns a car

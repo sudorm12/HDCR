@@ -1,3 +1,4 @@
+import logging
 from prepare_data import HCDALoader
 from sklearn.model_selection import KFold
 from keras.models import Sequential
@@ -5,6 +6,8 @@ from keras.layers import Dense
 
 
 def main():
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
     loader = HCDALoader()
 
     # load index values from main table
