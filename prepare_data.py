@@ -85,7 +85,7 @@ class HCDALoader:
         full_home_stats = apps_clean[stat_cols]
 
         # TODO: may want to set a selectable threshold for PCA columns based on explained variance
-        pca_components = 15
+        pca_components = 2
         pca_cols = ['CURR_HOME_' + str(pca_col) for pca_col in range(pca_components)]
 
         if fit_transform:
@@ -141,7 +141,6 @@ class HCDALoader:
         apps_clean[self._mean_imp_cols] = apps_clean[self._mean_imp_cols].fillna(self._mean_imp_means)
 
         return apps_clean
-
 
     def read_bureau(self):
         # read in credit bureau data
