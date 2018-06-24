@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import itertools
 import logging
 from sklearn.preprocessing import StandardScaler
 from soft_impute import SoftImpute
@@ -16,6 +15,8 @@ class HCDALoader:
         self._amt_an_lr = LinearRegression()
         self._st_pca = None
         self._num_scaler = StandardScaler()
+        self._mean_imp_cols = None
+        self._mean_imp_means = None
 
         logging.debug('Reading application_train.csv...')
         self._applications = pd.read_csv('{}/application_train.csv'.format(data_dir), index_col="SK_ID_CURR")
@@ -26,10 +27,11 @@ class HCDALoader:
 
     def load_train_val(self, train_index, val_index):
         # load each of the available data tables
-        applications_train = self.read_applications_train(train_index)
-        applications_val = self.read_applications_train(val_index)
+        applications_train = self.read_applications(train_index)
+        applications_val = self.read_applications(val_index, fit_transform=False)
         
         # join the dataframes together and fill nas with zeros
+        # TODO: add debug messages
         joined_train = applications_train.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
                                                                                              rsuffix='_PREVIOUS')
         full_data_train = joined_train.combine_first(joined_train.select_dtypes(include=[np.number]).fillna(0))
@@ -50,11 +52,13 @@ class HCDALoader:
 
         return data_train, target_train, data_val, target_val
 
-    def read_applications_train(self, split_index=None):
+    def read_applications(self, split_index=None, fit_transform=True):
         if split_index is None:
             apps_clean = self._applications.copy()
         else:
             apps_clean = self._applications.iloc[split_index].copy()
+
+        # TODO: add debug messages throughout method
 
         # track rows with high number of na values
         apps_clean['NA_COLS'] = apps_clean.isna().sum(axis=1)
@@ -73,21 +77,24 @@ class HCDALoader:
         stat_cols = [col for col in apps_clean.columns[apps_clean.columns.str.contains('|'.join(stat_suffixes))]]
 
         X = apps_clean[stat_cols].values
+        if True:  # fit_transform:
+            # TODO: only fit for fit_transform
+            self._curr_home_imputer.fit(X)
 
-        self._curr_home_imputer.fit(X)
         apps_clean[stat_cols] = self._curr_home_imputer.predict(X)
-
         full_home_stats = apps_clean[stat_cols]
 
-        # TODO: may want to set a selectable threshold for explained variance
+        # TODO: may want to set a selectable threshold for PCA columns based on explained variance
         pca_components = 15
         pca_cols = ['CURR_HOME_' + str(pca_col) for pca_col in range(pca_components)]
-        self._st_pca = PCA(n_components=pca_components)
 
-        home_stats_pca = pd.DataFrame(self._st_pca.fit_transform(full_home_stats),
+        if fit_transform:
+            self._st_pca = PCA(n_components=pca_components)
+            self._st_pca.fit(full_home_stats)
+
+        home_stats_pca = pd.DataFrame(self._st_pca.transform(full_home_stats),
                                       index=full_home_stats.index,
                                       columns=pca_cols)
-        # use self._st_pca.transform on out of sample data
 
         apps_clean = apps_clean.join(home_stats_pca)
         apps_clean = apps_clean.drop(stat_cols, axis=1)
@@ -100,102 +107,41 @@ class HCDALoader:
         apps_clean['AMT_REQ_CREDIT_BUREAU_YEAR'] = apps_clean['AMT_REQ_CREDIT_BUREAU_YEAR'].fillna(1)
         apps_clean[app_credit_cols] = apps_clean[app_credit_cols].fillna(0)
 
-        # infer goods price and annuity amount from credit using linear regression
-        amt_lr_rows = apps_clean['AMT_GOODS_PRICE'].notna()
-        x = apps_clean.loc[amt_lr_rows]['AMT_CREDIT']
-        y = apps_clean.loc[amt_lr_rows]['AMT_GOODS_PRICE']
+        # fit linear regression to infer goods price and annuity amount from credit using linear regression
+        if fit_transform:
+            amt_lr_rows = apps_clean['AMT_GOODS_PRICE'].notna()
+            x = apps_clean.loc[amt_lr_rows]['AMT_CREDIT']
+            y = apps_clean.loc[amt_lr_rows]['AMT_GOODS_PRICE']
+            self._amt_gp_lr.fit(x.values.reshape(-1, 1), y)
 
-        self._amt_gp_lr.fit(x.values.reshape(-1, 1), y)
-
+        # use fitted linear regression to predict goods price
         amt_fill_rows = apps_clean['AMT_GOODS_PRICE'].isna()
         x = apps_clean.loc[amt_fill_rows]['AMT_CREDIT']
         y = self._amt_gp_lr.predict(x.values.reshape(-1, 1))
-
         apps_clean.loc[amt_fill_rows, 'AMT_GOODS_PRICE'] = y
 
-        amt_lr_rows = apps_clean['AMT_ANNUITY'].notna()
-        x = apps_clean.loc[amt_lr_rows][['AMT_CREDIT', 'AMT_GOODS_PRICE']]
-        y = apps_clean.loc[amt_lr_rows]['AMT_ANNUITY']
+        # fit linear regression for annuity amount using credit amount and goods price]
+        if fit_transform:
+            amt_lr_rows = apps_clean['AMT_ANNUITY'].notna()
+            x = apps_clean.loc[amt_lr_rows][['AMT_CREDIT', 'AMT_GOODS_PRICE']]
+            y = apps_clean.loc[amt_lr_rows]['AMT_ANNUITY']
+            self._amt_an_lr.fit(x.values, y)
 
-        self._amt_an_lr.fit(x.values, y)
-
+        # use fitted linear regression to predict annuity amount
         amt_fill_rows = apps_clean['AMT_ANNUITY'].isna()
         x = apps_clean.loc[amt_fill_rows][['AMT_CREDIT', 'AMT_GOODS_PRICE']]
         y = self._amt_an_lr.predict(x.values)
-
         apps_clean.loc[amt_fill_rows, 'AMT_ANNUITY'] = y
 
         # basic mean imputation of remaining na values
-        mean_imp_cols = apps_clean.columns[apps_clean.isna().sum(axis=0) > 0]
-        mean_imp_means = apps_clean[mean_imp_cols].mean()
-        apps_clean[mean_imp_cols] = apps_clean[mean_imp_cols].fillna(mean_imp_means)
+        if fit_transform:
+            self._mean_imp_cols = apps_clean.columns[apps_clean.isna().sum(axis=0) > 0]
+            self._mean_imp_means = apps_clean[self._mean_imp_cols].mean()
+
+        apps_clean[self._mean_imp_cols] = apps_clean[self._mean_imp_cols].fillna(self._mean_imp_means)
 
         return apps_clean
 
-    def read_applications_val(self, split_index):
-        # TODO: merge with train method - fit_transform=True
-        apps_clean = self._applications.iloc[split_index].copy()
-
-        # change y/n columns to boolean
-        yn_cols = ['FLAG_OWN_CAR',
-                   'FLAG_OWN_REALTY']
-
-        apps_clean[yn_cols] = self._yn_cols_to_boolean(apps_clean, yn_cols)
-
-        # identify encoded columns, fill na with unspecified and change to categorical
-        apps_clean = self._cat_data(apps_clean)
-
-        # use smart imputation and pca on current home information
-        stat_suffixes = ['_AVG', '_MEDI', '_MODE']
-        stat_cols = [col[:-4] for col in apps_clean.columns[apps_clean.columns.str.contains(stat_suffixes[0])]]
-        all_stat_cols = [st + sf for st, sf in itertools.product(stat_cols, stat_suffixes)]
-
-        X = apps_clean[all_stat_cols].values
-
-        apps_clean[all_stat_cols] = self._curr_home_imputer.predict(X)
-
-        # convert categorical home info columns to one-hot encoded
-        stat_cat_cols = ['FONDKAPREMONT_MODE',
-                         'HOUSETYPE_MODE',
-                         'WALLSMATERIAL_MODE',
-                         'EMERGENCYSTATE_MODE']
-
-        full_home_stats = apps_clean[all_stat_cols].join(pd.get_dummies(apps_clean[stat_cat_cols]))
-        pca_components = 15
-        cols = ['CURR_HOME_' + str(pca_col) for pca_col in range(pca_components)]
-
-        home_stats_pca = pd.DataFrame(self._st_pca.transform(full_home_stats),
-                                      index=full_home_stats.index,
-                                      columns=cols)
-
-        apps_clean = apps_clean.join(home_stats_pca)
-        apps_clean = apps_clean.drop(all_stat_cols, axis=1)
-        apps_clean = apps_clean.drop(stat_cat_cols, axis=1)
-
-        # impute all credit bureau requests with zero, except past year with one
-        app_credit_cols = apps_clean.columns[apps_clean.columns.str.contains('AMT_REQ_CREDIT_BUREAU')]
-        apps_clean['AMT_REQ_CREDIT_BUREAU_YEAR'] = apps_clean['AMT_REQ_CREDIT_BUREAU_YEAR'].fillna(1)
-        apps_clean[app_credit_cols] = apps_clean[app_credit_cols].fillna(0)
-
-        # infer goods price and annuity amount from credit using linear regression
-        amt_fill_rows = apps_clean['AMT_GOODS_PRICE'].isna()
-        x = apps_clean.loc[amt_fill_rows]['AMT_CREDIT']
-        y = self._amt_gp_lr.predict(x.values.reshape(-1, 1))
-
-        apps_clean.loc[amt_fill_rows, 'AMT_GOODS_PRICE'] = y
-
-        amt_fill_rows = apps_clean['AMT_ANNUITY'].isna()
-        x = apps_clean.loc[amt_fill_rows][['AMT_CREDIT', 'AMT_GOODS_PRICE']]
-        y = self._amt_an_lr.predict(x.values)
-
-        apps_clean.loc[amt_fill_rows, 'AMT_ANNUITY'] = y
-
-        # basic mean imputation of remaining na values
-        mean_imp_cols = apps_clean.columns[apps_clean.isna().sum(axis=0) > 0]
-        mean_imp_means = apps_clean[mean_imp_cols].mean()
-        apps_clean[mean_imp_cols] = apps_clean[mean_imp_cols].fillna(mean_imp_means)
-
-        return apps_clean
 
     def read_bureau(self):
         # read in credit bureau data
