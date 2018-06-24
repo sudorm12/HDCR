@@ -17,6 +17,11 @@ class HCDALoader:
         self._num_scaler = StandardScaler()
 
         self._applications = pd.read_csv('{}/application_train.csv'.format(data_dir), index_col="SK_ID_CURR")
+        # TODO: add logging message for reading csv file
+        # import logging
+        # logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+        # logging.debug('This is a log message.')
+
         self._bureau_summary = self.read_bureau()
         self._previous_summary = self.read_previous_application()
 
@@ -34,8 +39,17 @@ class HCDALoader:
                                                                                          rsuffix='_PREVIOUS')
         full_data_val = joined_val.combine_first(joined_val.select_dtypes(include=[np.number]).fillna(0))
 
-        # TODO: scale numeric columns before returning
-        return full_data_train, full_data_val
+        # split full data into features and target
+        data_train = full_data_train.drop('TARGET', axis=1)
+        target_train = full_data_train['TARGET']
+        data_val = full_data_val.drop('TARGET', axis=1)
+        target_val = full_data_val['TARGET']
+
+        # scale numeric columns before returning
+        data_train = self._num_scaler.fit_transform(data_train.loc[:, data_train.dtypes == np.number])
+        data_val = self._num_scaler.transform(data_val.loc[:, data_val.dtypes == np.number])
+
+        return data_train, target_train, data_val, target_val
 
     def read_applications_train(self, split_index=None):
         if split_index is None:
@@ -52,23 +66,7 @@ class HCDALoader:
         apps_clean[yn_cols] = self._yn_cols_to_boolean(apps_clean, yn_cols)
 
         # identify encoded columns, fill na with unspecified and change to categorical
-        cat_cols = ['NAME_CONTRACT_TYPE',
-                    'CODE_GENDER',
-                    'NAME_TYPE_SUITE',
-                    'NAME_INCOME_TYPE',
-                    'NAME_EDUCATION_TYPE',
-                    'NAME_FAMILY_STATUS',
-                    'NAME_HOUSING_TYPE',
-                    'OCCUPATION_TYPE',
-                    'WEEKDAY_APPR_PROCESS_START',
-                    'ORGANIZATION_TYPE',
-                    'FONDKAPREMONT_MODE',
-                    'HOUSETYPE_MODE',
-                    'TOTALAREA_MODE',
-                    'WALLSMATERIAL_MODE',
-                    'EMERGENCYSTATE_MODE']
-
-        apps_clean = self._cat_data(apps_clean, cat_cols)
+        apps_clean = self._cat_data(apps_clean)
         # TODO: change categorical data to dummy columns
 
         # use smart imputation and pca on current home information
@@ -141,19 +139,10 @@ class HCDALoader:
         mean_imp_means = apps_clean[mean_imp_cols].mean()
         apps_clean[mean_imp_cols] = apps_clean[mean_imp_cols].fillna(mean_imp_means)
 
-        # scale columns with numerical data
-        # TODO: find a way to automatically detect numeric columns
-        # df.select_dtypes
-        # num_cols = []
-
-        # apps_clean[num_cols] = apps_clean[num_cols].fillna(apps_clean[num_cols].mean())
-
-        # apps_clean[num_cols] = self._num_scaler.fit_transform(apps_clean[num_cols])
-        # use scaler.fit on out-of-sample data
-
         return apps_clean
 
     def read_applications_val(self, split_index):
+        # TODO: merge with train method - fit_transform=True
         apps_clean = self._applications.iloc[split_index].copy()
 
         # change y/n columns to boolean
@@ -163,23 +152,7 @@ class HCDALoader:
         apps_clean[yn_cols] = self._yn_cols_to_boolean(apps_clean, yn_cols)
 
         # identify encoded columns, fill na with unspecified and change to categorical
-        cat_cols = ['NAME_CONTRACT_TYPE',
-                    'CODE_GENDER',
-                    'NAME_TYPE_SUITE',
-                    'NAME_INCOME_TYPE',
-                    'NAME_EDUCATION_TYPE',
-                    'NAME_FAMILY_STATUS',
-                    'NAME_HOUSING_TYPE',
-                    'OCCUPATION_TYPE',
-                    'WEEKDAY_APPR_PROCESS_START',
-                    'ORGANIZATION_TYPE',
-                    'FONDKAPREMONT_MODE',
-                    'HOUSETYPE_MODE',
-                    'TOTALAREA_MODE',
-                    'WALLSMATERIAL_MODE',
-                    'EMERGENCYSTATE_MODE']
-
-        apps_clean = self._cat_data(apps_clean, cat_cols)
+        apps_clean = self._cat_data(apps_clean)
 
         # use smart imputation and pca on current home information
         stat_suffixes = ['_AVG', '_MEDI', '_MODE']
@@ -231,16 +204,6 @@ class HCDALoader:
         mean_imp_means = apps_clean[mean_imp_cols].mean()
         apps_clean[mean_imp_cols] = apps_clean[mean_imp_cols].fillna(mean_imp_means)
 
-        # scale columns with numerical data
-        # TODO: find a way to automatically detect numeric columns
-        # df.select_dtypes
-        # num_cols = []
-
-        # apps_clean[num_cols] = apps_clean[num_cols].fillna(apps_clean[num_cols].mean())
-
-        # apps_clean[num_cols] = self._num_scaler.fit_transform(apps_clean[num_cols])
-        # use scaler.fit on out-of-sample data
-
         return apps_clean
 
     def read_bureau(self):
@@ -249,24 +212,11 @@ class HCDALoader:
         bureau_clean = bureau.copy()
 
         # convert categorical columns to Categorical dtype
-        cat_cols = ['CREDIT_ACTIVE',
-                    'CREDIT_CURRENCY',
-                    'CREDIT_TYPE']
-
-        # TODO: find a nicer way to share the cat_labels dict
-        bureau_clean = self._cat_data(bureau_clean, cat_cols)
+        bureau_clean = self._cat_data_dummies(bureau_clean)
 
         # sum up the numerical data for each applicant for a simple summary
-        bureau_num_summary = bureau.groupby('SK_ID_CURR').sum()
+        bureau_summary = bureau_clean.groupby('SK_ID_CURR').sum()
 
-        # count the number of each type of loan for each applicant
-        credit_types = bureau_clean.groupby(['SK_ID_CURR', 'CREDIT_TYPE']).size().unstack().fillna(0)
-
-        # count the number of open and closed loans for each applicant
-        credit_active = bureau_clean.groupby(['SK_ID_CURR', 'CREDIT_ACTIVE']).size().unstack().fillna(0)
-
-        # combine the summary dataframes
-        bureau_summary = bureau_num_summary.join([credit_active, credit_types]).fillna(0)
         return bureau_summary
 
     def read_previous_application(self):
@@ -274,28 +224,10 @@ class HCDALoader:
         previous_clean = previous_application.copy()
 
         # convert categorical columns to Categorical dtype
-        cat_cols = ['NAME_CONTRACT_TYPE',
-                    'WEEKDAY_APPR_PROCESS_START',
-                    'NAME_CASH_LOAN_PURPOSE',
-                    'NAME_CONTRACT_STATUS',
-                    'NAME_PAYMENT_TYPE',
-                    'CODE_REJECT_REASON',
-                    'NAME_TYPE_SUITE',
-                    'NAME_CLIENT_TYPE',
-                    'NAME_GOODS_CATEGORY',
-                    'NAME_PORTFOLIO',
-                    'NAME_PRODUCT_TYPE',
-                    'CHANNEL_TYPE',
-                    'NAME_SELLER_INDUSTRY',
-                    'NAME_YIELD_GROUP',
-                    'PRODUCT_COMBINATION']
+        previous_clean = self._cat_data_dummies(previous_clean)
 
-        previous_clean = self._cat_data(previous_clean, cat_cols)
-
-        # create numerical and categorical summaries and join them together
-        prev_app_num_summary = previous_clean.groupby('SK_ID_CURR').sum()
-        prev_app_cat_summary = pd.get_dummies(previous_clean[cat_cols + ['SK_ID_CURR']]).groupby('SK_ID_CURR').sum()
-        prev_app_summary = prev_app_num_summary.join(prev_app_cat_summary)
+        # create summary of the data and join them together
+        prev_app_summary = previous_clean.groupby('SK_ID_CURR').sum()
         return prev_app_summary
 
     def applications_train_index(self):
@@ -306,20 +238,7 @@ class HCDALoader:
                   'N': 0}
         return df[cols].replace(yn_map)
 
-    def _cat_data(self, df, cols):
-        df_clean = df.copy()
-        cat_na_count = df_clean[cols].isna().sum(axis=0)
-        cat_na_map = {cat: 'Unspecified' for cat in cat_na_count[cat_na_count > 0].index}
-        df_clean = df_clean.fillna(value=cat_na_map)
-
-        cat_labels = {}
-        for cat_col in cols:
-            cat_labels[cat_col] = df_clean[cat_col].unique()
-            df_clean[cat_col] = pd.Categorical(df_clean[cat_col], categories=cat_labels[cat_col])
-
-        return df_clean
-
-    def _cat_data_dummies(self, df):
+    def _cat_data(self, df):
         df_clean = df.copy()
 
         # detect columns with dtype 'object'
@@ -336,7 +255,15 @@ class HCDALoader:
             cat_labels[cat_col] = df_clean[cat_col].unique()
             df_clean[cat_col] = pd.Categorical(df_clean[cat_col], categories=cat_labels[cat_col])
 
-        # convert categorical columns to dummy columns
+        return df_clean
+
+    def _cat_data_dummies(self, df):
+        df_clean = df.copy()
+
+        # convert categorical columns to Categorical dtype
+        df_clean = self._cat_data(df_clean)
+
+        # convert Categorical columns to dummy columns
         df_clean = pd.get_dummies(df_clean)
 
         # return dataframe with dummy columns
