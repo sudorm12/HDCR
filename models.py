@@ -2,6 +2,7 @@ import logging
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.regularizers import l2
+from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
 
 
 class LinearNN:
@@ -28,3 +29,25 @@ class LinearNN:
 
     def predict(self, data):
         return self._model.predict(data)
+
+
+class GBC:
+    def __init__(self, n_estimators=10):
+        self._model = GradientBoostingClassifier(n_estimators=n_estimators)
+
+    def fit(self, data_train, target_train):
+        self._model.fit(data_train, target_train)
+
+    def predict(self, data):
+        self._model.predict(data)
+
+
+class ABC:
+    def __init__(self, n_estimators=10):
+        self._model = AdaBoostClassifier(n_estimators=n_estimators)
+
+    def fit(self, data_train, target_train):
+        self._model.fit(data_train, target_train)
+
+    def predict(self, data):
+        self._model.predict(data)

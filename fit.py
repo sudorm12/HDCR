@@ -1,7 +1,7 @@
 import logging
 from prepare_data import HCDALoader
 from sklearn.model_selection import KFold
-from models import LinearNN
+from models import LinearNN, GBC, ABC
 
 
 def main():
@@ -26,10 +26,18 @@ def main():
         # train on linear neural network
         linear_nn = LinearNN(data_train_os.shape[1])
         linear_nn.fit(data_train_os, target_train_os, data_val, target_val)
+        # TODO: use predict on out of sample data and store results for each model
+
+        # gradient boosting classifier
+        gbc = GBC()
+        gbc.fit(data_train_os, target_train_os)
+
+        # adaboost classifier
+        abc = ABC()
+        abc.fit(data_train_os, target_train_os)
 
         # TODO: new model performing 1D convolution on bureau and loan balances
         # TODO: model using LSTM to analyze bureau and loan balances
-        # TODO: random forest model
 
 
 if __name__ == "__main__":
