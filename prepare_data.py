@@ -9,6 +9,7 @@ from sklearn.linear_model import LinearRegression
 
 class HCDALoader:
     def __init__(self, data_dir='data'):
+        logging.debug('Initializing data loader')
         self._data_dir = data_dir
         self._curr_home_imputer = SoftImpute()
         self._amt_gp_lr = LinearRegression()
@@ -22,8 +23,11 @@ class HCDALoader:
         self._applications = pd.read_csv('{}/application_train.csv'.format(data_dir), index_col="SK_ID_CURR")
         logging.debug('Finished reading application_train.csv')
 
+        logging.debug('Loading bureau data...')
         self._bureau_summary = self.read_bureau()
+        logging.debug('Loading previous application data...')
         self._previous_summary = self.read_previous_application()
+        logging.debug('Done')
 
     def load_train_val(self, train_index, val_index):
         # load each of the available data tables
@@ -31,11 +35,11 @@ class HCDALoader:
         applications_val = self.read_applications(val_index, fit_transform=False)
         
         # join the dataframes together and fill nas with zeros
-        # TODO: add debug messages
+        logging.debug('Loading training data...')
         joined_train = applications_train.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
                                                                                              rsuffix='_PREVIOUS')
         full_data_train = joined_train.combine_first(joined_train.select_dtypes(include=[np.number]).fillna(0))
-
+        logging.debug('Loading validation data...')
         joined_val = applications_val.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
                                                                                          rsuffix='_PREVIOUS')
         full_data_val = joined_val.combine_first(joined_val.select_dtypes(include=[np.number]).fillna(0))
@@ -47,12 +51,15 @@ class HCDALoader:
         target_val = full_data_val['TARGET']
 
         # scale numeric columns before returning
+        logging.debug('Scaling train and validation data...')
         data_train = self._num_scaler.fit_transform(data_train.loc[:, data_train.dtypes == np.number])
         data_val = self._num_scaler.transform(data_val.loc[:, data_val.dtypes == np.number])
 
+        logging.debug('Done')
         return data_train, target_train, data_val, target_val
 
     def read_applications(self, split_index=None, fit_transform=True):
+        logging.debug('Preparing applications data...')
         if split_index is None:
             apps_clean = self._applications.copy()
         else:
@@ -77,6 +84,7 @@ class HCDALoader:
         stat_cols = [col for col in apps_clean.columns[apps_clean.columns.str.contains('|'.join(stat_suffixes))]]
 
         X = apps_clean[stat_cols].values
+        logging.debug('Performing soft impute on current home info...')
         if True:  # fit_transform:
             # TODO: only fit for fit_transform
             self._curr_home_imputer.fit(X)
@@ -88,6 +96,7 @@ class HCDALoader:
         pca_components = 2
         pca_cols = ['CURR_HOME_' + str(pca_col) for pca_col in range(pca_components)]
 
+        logging.debug('Running PCA on current home info...')
         if fit_transform:
             self._st_pca = PCA(n_components=pca_components)
             self._st_pca.fit(full_home_stats)
@@ -107,6 +116,7 @@ class HCDALoader:
         apps_clean['AMT_REQ_CREDIT_BUREAU_YEAR'] = apps_clean['AMT_REQ_CREDIT_BUREAU_YEAR'].fillna(1)
         apps_clean[app_credit_cols] = apps_clean[app_credit_cols].fillna(0)
 
+        logging.debug('Performing linear regression on goods price and annuity amount...')
         # fit linear regression to infer goods price and annuity amount from credit using linear regression
         if fit_transform:
             amt_lr_rows = apps_clean['AMT_GOODS_PRICE'].notna()
