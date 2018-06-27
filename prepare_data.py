@@ -175,6 +175,31 @@ class HCDALoader:
         prev_app_summary = previous_clean.groupby('SK_ID_CURR').sum()
         return prev_app_summary
 
+    def read_credit_card_balance(self):
+        # read cc balance csv and full list of id values
+        logging.debug('Reading credit card balance file...')
+        credit_card_balance = pd.read_csv('{}/credit_card_balance.csv'.format(self._data_dir))
+        app_ix = self.applications_train_index()
+
+        # convert categorical columns to dummy values
+        credit_card_balance = self._cat_data_dummies(credit_card_balance)
+
+        # fill missing id values
+        missing_ids = app_ix[~app_ix.isin(credit_card_balance['SK_ID_CURR'].unique())].values
+        missing_df = pd.DataFrame({'SK_ID_CURR': missing_ids})
+        missing_df['MONTHS_BALANCE'] = -1
+
+        # mix it all around
+        logging.debug('Preparing credit card balance data...')
+        cc_ts_summary = (credit_card_balance
+                         .append(missing_df)
+                         .drop(['SK_ID_PREV'], axis=1)
+                         .groupby(['SK_ID_CURR', 'MONTHS_BALANCE']).sum()
+                         .unstack().stack(dropna=False))
+        # TODO: convert to sparse dataframe
+        logging.debug('Done.')
+        return cc_ts_summary
+
     def applications_train_index(self):
         return self._applications.index
 
