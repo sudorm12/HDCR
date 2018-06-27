@@ -4,7 +4,7 @@ from sklearn.model_selection import KFold
 from models import LinearNN, GBC, ABC
 
 
-def main():
+def compare_models():
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
     loader = HCDALoader()
@@ -40,5 +40,9 @@ def main():
         # TODO: model using LSTM to analyze bureau and loan balances
 
 
+def predict_test():
+    pass
+
+
 if __name__ == "__main__":
-    main()
+    compare_models()

@@ -8,6 +8,7 @@ from sklearn.linear_model import LinearRegression
 
 
 class HCDALoader:
+    # TODO: change to hcdr loader
     def __init__(self, data_dir='data'):
         logging.debug('Initializing data loader')
         self._data_dir = data_dir
@@ -35,11 +36,11 @@ class HCDALoader:
         applications_val = self.read_applications(val_index, fit_transform=False)
         
         # join the dataframes together and fill nas with zeros
-        logging.debug('Loading training data...')
+        logging.debug('Collating training data...')
         joined_train = applications_train.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
                                                                                              rsuffix='_PREVIOUS')
         full_data_train = joined_train.combine_first(joined_train.select_dtypes(include=[np.number]).fillna(0))
-        logging.debug('Loading validation data...')
+        logging.debug('Collating validation data...')
         joined_val = applications_val.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
                                                                                          rsuffix='_PREVIOUS')
         full_data_val = joined_val.combine_first(joined_val.select_dtypes(include=[np.number]).fillna(0))
@@ -64,8 +65,6 @@ class HCDALoader:
             apps_clean = self._applications.copy()
         else:
             apps_clean = self._applications.iloc[split_index].copy()
-
-        # TODO: add debug messages throughout method
 
         # track rows with high number of na values
         apps_clean['NA_COLS'] = apps_clean.isna().sum(axis=1)
