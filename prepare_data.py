@@ -175,7 +175,7 @@ class HCDRLoader:
         prev_app_summary = previous_clean.groupby('SK_ID_CURR').sum()
         return prev_app_summary
 
-    def read_credit_card_balance(self, sk_ids=None):
+    def read_credit_card_balance(self, sk_ids=None, t_max=100):
         # read cc balance csv and full list of id values
         logging.debug('Reading credit card balance file...')
         credit_card_balance = pd.read_csv('{}/credit_card_balance.csv'.format(self._data_dir))
@@ -199,7 +199,9 @@ class HCDRLoader:
                          .append(missing_df)
                          .drop(['SK_ID_PREV'], axis=1)
                          .groupby(['SK_ID_CURR', 'MONTHS_BALANCE']).sum()
-                         .unstack())
+                         .unstack(level=0).reindex(np.arange(-t_max, 0)).stack(dropna=False)
+                         .swaplevel(0, 1).sort_index().unstack())
+
         logging.debug('Sparsifying...')
         cc_ts_sparse = csr_matrix(cc_ts_summary.fillna(0).values)
 
@@ -211,7 +213,7 @@ class HCDRLoader:
         t_max = -credit_card_balance['MONTHS_BALANCE'].min()
 
         logging.debug('Done')
-        return cc_ts_sparse, cc_id_index, t_max
+        return cc_ts_sparse, cc_id_index
 
     def read_credit_card_balance_3d(self, sk_ids=None):
         # read cc balance csv and full list of id values
