@@ -200,14 +200,17 @@ class HCDRLoader:
                          .drop(['SK_ID_PREV'], axis=1)
                          .groupby(['SK_ID_CURR', 'MONTHS_BALANCE']).sum()
                          .unstack().stack(dropna=False))
-        cc_ts_sparse = csr_matrix(cc_ts_summary)
+        logging.debug('Sparsifying...')
+        cc_ts_sparse = csr_matrix(cc_ts_summary.fillna(0).values)
 
         # track index of numpy array
+        logging.debug('Creating credit data index...')
         cc_id_index = cc_ts_summary.index.get_level_values(cc_ts_summary.index.names[0]).unique()
 
         # find maximum time scale
         t_max = -credit_card_balance['MONTHS_BALANCE'].min()
 
+        logging.debug('Done')
         return cc_ts_sparse, cc_id_index, t_max
 
     def read_credit_card_balance_3d(self, sk_ids=None):
