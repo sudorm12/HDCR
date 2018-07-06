@@ -5,10 +5,10 @@ from sklearn.preprocessing import StandardScaler
 from soft_impute import SoftImpute
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
+from scipy.sparse import csr_matrix
 
 
-class HCDALoader:
-    # TODO: change to hcdr loader
+class HCDRLoader:
     def __init__(self, data_dir='data'):
         logging.debug('Initializing data loader')
         self._data_dir = data_dir
@@ -176,6 +176,41 @@ class HCDALoader:
         return prev_app_summary
 
     def read_credit_card_balance(self, sk_ids=None):
+        # read cc balance csv and full list of id values
+        logging.debug('Reading credit card balance file...')
+        credit_card_balance = pd.read_csv('{}/credit_card_balance.csv'.format(self._data_dir))
+        app_ix = self.applications_train_index()
+
+        if sk_ids is None:
+            sk_ids = app_ix.values
+        credit_card_balance = credit_card_balance[credit_card_balance['SK_ID_CURR'].isin(sk_ids)]
+
+        # convert categorical columns to dummy values
+        credit_card_balance = self._cat_data_dummies(credit_card_balance)
+
+        # fill missing id values
+        missing_ids = app_ix[~app_ix.isin(credit_card_balance['SK_ID_CURR'].unique())].values
+        missing_df = pd.DataFrame({'SK_ID_CURR': missing_ids})
+        missing_df['MONTHS_BALANCE'] = -1
+
+        # mix it all around
+        logging.debug('Preparing credit card balance data...')
+        cc_ts_summary = (credit_card_balance
+                         .append(missing_df)
+                         .drop(['SK_ID_PREV'], axis=1)
+                         .groupby(['SK_ID_CURR', 'MONTHS_BALANCE']).sum()
+                         .unstack().stack(dropna=False))
+        cc_ts_sparse = csr_matrix(cc_ts_summary)
+
+        # track index of numpy array
+        cc_id_index = cc_ts_summary.index.get_level_values(cc_ts_summary.index.names[0]).unique()
+
+        # find maximum time scale
+        t_max = -credit_card_balance['MONTHS_BALANCE'].min()
+
+        return cc_ts_sparse, cc_id_index, t_max
+
+    def read_credit_card_balance_3d(self, sk_ids=None):
         # read cc balance csv and full list of id values
         logging.debug('Reading credit card balance file...')
         credit_card_balance = pd.read_csv('{}/credit_card_balance.csv'.format(self._data_dir))

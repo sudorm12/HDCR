@@ -1,5 +1,5 @@
 import logging
-from prepare_data import HCDALoader
+from prepare_data import HCDRLoader
 from sklearn.model_selection import KFold
 from models import LinearNN, GBC, ABC
 
@@ -7,7 +7,7 @@ from models import LinearNN, GBC, ABC
 def compare_models():
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    loader = HCDALoader()
+    loader = HCDRLoader()
 
     # load index values from main table
     app_ix = loader.applications_train_index()
