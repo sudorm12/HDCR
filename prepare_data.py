@@ -199,13 +199,13 @@ class HCDRLoader:
                          .append(missing_df)
                          .drop(['SK_ID_PREV'], axis=1)
                          .groupby(['SK_ID_CURR', 'MONTHS_BALANCE']).sum()
-                         .unstack().stack(dropna=False))
+                         .unstack())
         logging.debug('Sparsifying...')
         cc_ts_sparse = csr_matrix(cc_ts_summary.fillna(0).values)
 
         # track index of numpy array
         logging.debug('Creating credit data index...')
-        cc_id_index = cc_ts_summary.index.get_level_values(cc_ts_summary.index.names[0]).unique()
+        cc_id_index = cc_ts_summary.index
 
         # find maximum time scale
         t_max = -credit_card_balance['MONTHS_BALANCE'].min()
