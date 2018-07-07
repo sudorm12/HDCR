@@ -189,7 +189,7 @@ class HCDRLoader:
         credit_card_balance = self._cat_data_dummies(credit_card_balance)
 
         # fill missing id values
-        missing_ids = app_ix[~app_ix.isin(credit_card_balance['SK_ID_CURR'].unique())].values
+        missing_ids = sk_ids[~np.isin(sk_ids, credit_card_balance['SK_ID_CURR'].unique())]
         missing_df = pd.DataFrame({'SK_ID_CURR': missing_ids})
         missing_df['MONTHS_BALANCE'] = -1
 
@@ -206,14 +206,10 @@ class HCDRLoader:
         cc_ts_sparse = csr_matrix(cc_ts_summary.fillna(0).values)
 
         # track index of numpy array
-        logging.debug('Creating credit data index...')
         cc_id_index = cc_ts_summary.index
 
-        # find maximum time scale
-        t_max = -credit_card_balance['MONTHS_BALANCE'].min()
-
         logging.debug('Done')
-        return cc_ts_sparse, cc_id_index
+        return cc_ts_sparse
 
     def read_credit_card_balance_3d(self, sk_ids=None):
         # read cc balance csv and full list of id values

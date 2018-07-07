@@ -1,6 +1,6 @@
 import logging
 from keras.models import Sequential, Model
-from keras.layers import LSTM, Dense, Input, concatenate
+from keras.layers import LSTM, Dense, Input, Reshape, concatenate
 from keras.regularizers import l2
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
 
@@ -54,18 +54,18 @@ class ABC:
 
 
 class LSTMWithMetadata:
-    def __init__(self, sequence_length, meta_length, num_dense_layers=1):
-        # this code is for only one sequence per row
-        main_input = Input(shape=(sequence_length,), dtype='int32', name='main_input')
-        lstm = LSTM(32)(main_input)
+    def __init__(self, sequence_length, sequence_features, meta_features, num_dense_layers=1):
+        lstm_input = Input(shape=(sequence_length*sequence_features,), name='main_input')
+        reshaped_input = Reshape(lstm_input, shape=(sequence_length, sequence_features))
+        lstm = LSTM(32)(reshaped_input, shape=(sequence_length, sequence_features), activation='relu')
         lstm_output = Dense(1, activation='sigmoid', name='lstm_output')(lstm)
-        meta_input = Input(shape=(meta_length,))
+        meta_input = Input(shape=(meta_features,))
         x = concatenate([lstm, meta_input])
         for i in range(num_dense_layers):
             x = Dense(64, activation='relu')(x)
         main_output = Dense(1, activation='sigmoid', name='main_output')(x)
 
-        self._model = Model(inputs=[main_input, meta_input], outputs=[main_output, lstm_output])
+        self._model = Model(inputs=[lstm_input, meta_input], outputs=[main_output, lstm_output])
 
         self._model.compile(optimizer='rmsprop',
                             loss='binary_crossentropy',
