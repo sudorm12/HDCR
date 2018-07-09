@@ -54,29 +54,45 @@ class ABC:
 
 
 class LSTMWithMetadata:
-    def __init__(self, sequence_length, sequence_features, meta_features, num_dense_layers=1):
-        lstm_input = Input(shape=(sequence_length*sequence_features,), name='main_input')
-        reshaped_input = Reshape(lstm_input, shape=(sequence_length, sequence_features))
-        lstm = LSTM(32)(reshaped_input, shape=(sequence_length, sequence_features), activation='relu')
+    def __init__(self, sequence_length, sequence_features, meta_features,
+                 sequence_dense_layers=1, meta_dense_layers=1, comb_dense_layers=1,
+                 sequence_dense_width=32, meta_dense_width=32, comb_dense_width=32,
+                 sequence_l2_reg=0, meta_l2_reg=0, comb_l2_reg=0):
+        lstm_input = Input(shape=(sequence_length * sequence_features,), name='lstm_input')
+        reshaped_input = Reshape((sequence_length, sequence_features), name='reshaped_input')(lstm_input)
+        lstm = LSTM(8, activation='relu', go_backwards=False, name='lstm')(reshaped_input)
+        for i in range(sequence_dense_layers):
+            lstm = Dense(sequence_dense_width, activation='relu', kernel_regularizer=l2(sequence_l2_reg),
+                         name='seq_dense_{}'.format(i))(lstm)
         lstm_output = Dense(1, activation='sigmoid', name='lstm_output')(lstm)
-        meta_input = Input(shape=(meta_features,))
-        x = concatenate([lstm, meta_input])
-        for i in range(num_dense_layers):
-            x = Dense(64, activation='relu')(x)
+        meta_input = Input(shape=(meta_features,), name='meta_input')
+        meta_dense = meta_input
+        for i in range(meta_dense_layers):
+            meta_dense = Dense(meta_dense_width, activation='relu', kernel_regularizer=l2(meta_l2_reg),
+                               name='meta_dense_{}'.format(i))(meta_dense)
+        x = concatenate([lstm, meta_dense], name='concatenate')
+        for i in range(comb_dense_layers):
+            x = Dense(comb_dense_width, activation='relu', kernel_regularizer=l2(comb_l2_reg),
+                      name='combined_dense_{}'.format(i))(x)
         main_output = Dense(1, activation='sigmoid', name='main_output')(x)
 
         self._model = Model(inputs=[lstm_input, meta_input], outputs=[main_output, lstm_output])
 
         self._model.compile(optimizer='rmsprop',
                             loss='binary_crossentropy',
-                            loss_weights=[1., 0.2])
+                            loss_weights=[1., 0.2],
+                            metrics=['accuracy'])
 
     def fit(self, ts_data_train, meta_data_train, target_train,
             ts_data_val, meta_data_val, target_val,
             num_epochs=5, batch_size=32):
-        self._model.fit([ts_data_train, meta_data_train], [target_train, target_train],
-                        validation_data=([ts_data_val, meta_data_val], [target_val, target_val]),
-                        epochs=num_epochs, batch_size=batch_size)
+        history = self._model.fit([ts_data_train, meta_data_train], [target_train, target_train],
+                                  validation_data=([ts_data_val, meta_data_val], [target_val, target_val]),
+                                  epochs=num_epochs, batch_size=batch_size)
+        return history
 
     def predict(self, ts_data, meta_data):
         return self._model.predict([ts_data, meta_data])
+
+    def model_summary(self):
+        return self._model.summary()

@@ -198,15 +198,13 @@ class HCDRLoader:
         cc_ts_summary = (credit_card_balance
                          .append(missing_df)
                          .drop(['SK_ID_PREV'], axis=1)
+                         .fillna(0)
                          .groupby(['SK_ID_CURR', 'MONTHS_BALANCE']).sum()
                          .unstack(level=0).reindex(np.arange(-t_max, 0)).stack(dropna=False)
                          .swaplevel(0, 1).sort_index().unstack())
 
         logging.debug('Sparsifying...')
         cc_ts_sparse = csr_matrix(cc_ts_summary.fillna(0).values)
-
-        # track index of numpy array
-        cc_id_index = cc_ts_summary.index
 
         logging.debug('Done')
         return cc_ts_sparse
