@@ -77,13 +77,14 @@ def grid_search():
     sequence_length = 25
 
     hyperparameters = {
-        'sequence_dense_layers': [0],
-        'sequence_dense_width': [4],
+        'sequence_dense_layers': [0, 1],
+        'sequence_dense_width': [4, 8],
         'sequence_l2_reg': [0],
         'meta_dense_layers': [0, 1],
-        'meta_dense_width': [32],
-        'comb_dense_layers': [0],
-        'lstm_units': [4]
+        'meta_dense_width': [32, 64],
+        'meta_l2_reg': [0, 1e-5],
+        'comb_dense_layers': [0, 1],
+        'lstm_units': [4, 8]
     }
 
     keys, values = zip(*hyperparameters.items())
@@ -118,8 +119,7 @@ def grid_search():
             lstm_nn = LSTMWithMetadata(sequence_length, sequence_features, meta_features,
                                        **experiment)
             history = lstm_nn.fit(cc_data_train_os, data_train_os, target_train_os,
-                                cc_data_val, data_val, target_val,
-                                num_epochs=2)
+                                cc_data_val, data_val, target_val)
             predict_val = lstm_nn.predict(cc_data_val, data_val)
 
             cm_fold = confusion_matrix(target_val, predict_val[0].round())

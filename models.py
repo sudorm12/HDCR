@@ -58,7 +58,10 @@ class LSTMWithMetadata:
                  sequence_dense_layers=1, meta_dense_layers=1, comb_dense_layers=1,
                  sequence_dense_width=32, meta_dense_width=32, comb_dense_width=32,
                  sequence_l2_reg=0, meta_l2_reg=0, comb_l2_reg=0,
-                 lstm_units=8):
+                 lstm_units=8,
+                 num_epochs=5, batch_size=32):
+        self._num_epochs = num_epochs
+        self._batch_size = batch_size
         lstm_input = Input(shape=(sequence_length * sequence_features,), name='lstm_input')
         reshaped_input = Reshape((sequence_length, sequence_features), name='reshaped_input')(lstm_input)
         lstm = LSTM(lstm_units, activation='relu', go_backwards=False, name='lstm')(reshaped_input)
@@ -85,11 +88,10 @@ class LSTMWithMetadata:
                             metrics=['accuracy'])
 
     def fit(self, ts_data_train, meta_data_train, target_train,
-            ts_data_val, meta_data_val, target_val,
-            num_epochs=5, batch_size=32):
+            ts_data_val, meta_data_val, target_val):
         history = self._model.fit([ts_data_train, meta_data_train], [target_train, target_train],
                                   validation_data=([ts_data_val, meta_data_val], [target_val, target_val]),
-                                  epochs=num_epochs, batch_size=batch_size, verbose=2)
+                                  epochs=self._num_epochs, batch_size=self._batch_size, verbose=2)
         return history
 
     def predict(self, ts_data, meta_data):
