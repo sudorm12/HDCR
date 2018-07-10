@@ -57,10 +57,11 @@ class LSTMWithMetadata:
     def __init__(self, sequence_length, sequence_features, meta_features,
                  sequence_dense_layers=1, meta_dense_layers=1, comb_dense_layers=1,
                  sequence_dense_width=32, meta_dense_width=32, comb_dense_width=32,
-                 sequence_l2_reg=0, meta_l2_reg=0, comb_l2_reg=0):
+                 sequence_l2_reg=0, meta_l2_reg=0, comb_l2_reg=0,
+                 lstm_units=8):
         lstm_input = Input(shape=(sequence_length * sequence_features,), name='lstm_input')
         reshaped_input = Reshape((sequence_length, sequence_features), name='reshaped_input')(lstm_input)
-        lstm = LSTM(8, activation='relu', go_backwards=False, name='lstm')(reshaped_input)
+        lstm = LSTM(lstm_units, activation='relu', go_backwards=False, name='lstm')(reshaped_input)
         for i in range(sequence_dense_layers):
             lstm = Dense(sequence_dense_width, activation='relu', kernel_regularizer=l2(sequence_l2_reg),
                          name='seq_dense_{}'.format(i))(lstm)
@@ -88,7 +89,7 @@ class LSTMWithMetadata:
             num_epochs=5, batch_size=32):
         history = self._model.fit([ts_data_train, meta_data_train], [target_train, target_train],
                                   validation_data=([ts_data_val, meta_data_val], [target_val, target_val]),
-                                  epochs=num_epochs, batch_size=batch_size)
+                                  epochs=num_epochs, batch_size=batch_size, verbose=2)
         return history
 
     def predict(self, ts_data, meta_data):

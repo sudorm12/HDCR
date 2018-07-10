@@ -125,9 +125,10 @@ class HCDRLoader:
 
         # use fitted linear regression to predict goods price
         amt_fill_rows = apps_clean['AMT_GOODS_PRICE'].isna()
-        x = apps_clean.loc[amt_fill_rows]['AMT_CREDIT']
-        y = self._amt_gp_lr.predict(x.values.reshape(-1, 1))
-        apps_clean.loc[amt_fill_rows, 'AMT_GOODS_PRICE'] = y
+        if sum(amt_fill_rows) > 0:
+            x = apps_clean.loc[amt_fill_rows]['AMT_CREDIT']
+            y = self._amt_gp_lr.predict(x.values.reshape(-1, 1))
+            apps_clean.loc[amt_fill_rows, 'AMT_GOODS_PRICE'] = y
 
         # fit linear regression for annuity amount using credit amount and goods price]
         if fit_transform:
@@ -138,9 +139,10 @@ class HCDRLoader:
 
         # use fitted linear regression to predict annuity amount
         amt_fill_rows = apps_clean['AMT_ANNUITY'].isna()
-        x = apps_clean.loc[amt_fill_rows][['AMT_CREDIT', 'AMT_GOODS_PRICE']]
-        y = self._amt_an_lr.predict(x.values)
-        apps_clean.loc[amt_fill_rows, 'AMT_ANNUITY'] = y
+        if sum(amt_fill_rows) > 0:
+            x = apps_clean.loc[amt_fill_rows][['AMT_CREDIT', 'AMT_GOODS_PRICE']]
+            y = self._amt_an_lr.predict(x.values)
+            apps_clean.loc[amt_fill_rows, 'AMT_ANNUITY'] = y
 
         # basic mean imputation of remaining na values
         if fit_transform:
@@ -181,12 +183,13 @@ class HCDRLoader:
         credit_card_balance = pd.read_csv('{}/credit_card_balance.csv'.format(self._data_dir))
         app_ix = self.applications_train_index()
 
+        # convert categorical columns to dummy values
+        credit_card_balance = self._cat_data_dummies(credit_card_balance)
+
+        # skim unused ids from input data
         if sk_ids is None:
             sk_ids = app_ix.values
         credit_card_balance = credit_card_balance[credit_card_balance['SK_ID_CURR'].isin(sk_ids)]
-
-        # convert categorical columns to dummy values
-        credit_card_balance = self._cat_data_dummies(credit_card_balance)
 
         # fill missing id values
         missing_ids = sk_ids[~np.isin(sk_ids, credit_card_balance['SK_ID_CURR'].unique())]
@@ -215,12 +218,12 @@ class HCDRLoader:
         credit_card_balance = pd.read_csv('{}/credit_card_balance.csv'.format(self._data_dir))
         app_ix = self.applications_train_index()
 
+        # convert categorical columns to dummy values
+        credit_card_balance = self._cat_data_dummies(credit_card_balance)
+
         if sk_ids is None:
             sk_ids = app_ix.values
         credit_card_balance = credit_card_balance[credit_card_balance['SK_ID_CURR'].isin(sk_ids)]
-
-        # convert categorical columns to dummy values
-        credit_card_balance = self._cat_data_dummies(credit_card_balance)
 
         # fill missing id values
         missing_ids = app_ix[~app_ix.isin(credit_card_balance['SK_ID_CURR'].unique())].values
