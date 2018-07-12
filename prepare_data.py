@@ -7,7 +7,7 @@ from sklearn.decomposition import PCA
 from sklearn.linear_model import LinearRegression
 from scipy.sparse import csr_matrix
 
-
+# TODO: determine standardized data loader methods
 class HCDRLoader:
     def __init__(self, data_dir='data'):
         logging.debug('Initializing data loader')
