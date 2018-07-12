@@ -126,12 +126,12 @@ def lstm_grid_search():
             results_df.to_csv(results_path)
 
 def grid_search(model_class, data_loader, 
-                loader_args=None, model_args=None, 
-                hp_file=NotImplemented, folds=4):
+                loader_args=None, model_args=None, hp_file=NotImplemented, 
+                folds=4, random_oversample=False):
 
     # TODO: implement using generic data loader methods
     # TODO: this needs to be one of the loader args: sequence_length = 25
-    loader = data_loader(loader_args)
+    loader = data_loader(**loader_args)
 
     # load index values from main table
     data_ix = loader.get_index()
@@ -154,7 +154,7 @@ def grid_search(model_class, data_loader,
     exp_df = pd.DataFrame(experiments)
 
     # prepare for storing confusion matrix and accuracy results to file
-    # TODO: store accuracy results
+    # TODO: store oos accuracy per epoch
     cm = np.zeros((len(experiments), 2, 2), dtype=int)
     cm_df_cols = ['CM True Neg', 'CM False Pos', 'CM False Neg', 'CM True Pos']
     results_path = 'results/gridsearch_results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
@@ -163,28 +163,28 @@ def grid_search(model_class, data_loader,
     kf = KFold(n_splits=folds, shuffle=True)
 
     for j, fold_indexes in enumerate(kf.split(data_ix)):
+        # load train and validation data
         data_train, target_train, data_val, target_val = loader.load_train_val(fold_indexes[0], fold_indexes[1])
-        cc_data_train = loader.read_credit_card_balance(data_ix.values[fold_indexes[0]], t_max=sequence_length)
-        cc_data_val = loader.read_credit_card_balance(data_ix.values[fold_indexes[1]], t_max=sequence_length)
 
-        # TODO: determine where to infer number of features
-        sequence_features = np.int(cc_data_train.shape[1] / sequence_length)
-        meta_features = np.int(data_train.shape[1])
+        # determine shape of input arrays
+        input_shape = loader.get_input_shape()
 
-        ros = RandomOverSampler()
-        data_train_os_index, target_train_os = ros.fit_sample(np.arange(data_train.shape[0]).reshape(-1, 1), target_train)
-        data_train_os = data_train[data_train_os_index.squeeze()]
-        cc_data_train_os = cc_data_train[data_train_os_index.squeeze()]
+        # oversample to correct for class imbalance
+        if random_oversample:
+            ros = RandomOverSampler()
+            data_train_os_index, target_train = ros.fit_sample(np.arange(data_train.shape[0]).reshape(-1, 1), target_train)
+            data_train = data_train[data_train_os_index.squeeze()]
 
         logging.debug('Fold {} of {}'.format(j + 1, folds))
         
         for i, experiment in enumerate(experiments):
             logging.debug(experiment)
-            lstm_nn = model_class(*model_args, **experiment)
-            history = lstm_nn.fit([cc_data_train_os, data_train_os], target_train_os,
-                                  [cc_data_val, data_val], target_val)
-            predict_val = lstm_nn.predict([cc_data_val, data_val])
+            model = model_class(input_shape, **model_args, **experiment)
+            # TODO: track oos accuracy per epoch
+            history = model.fit(data_train, target_train, data_val, target_val)
+            predict_val = model.predict(data_val)
 
+            # TODO: simple models may only have one item in predict_val
             cm[i, :, :] = cm[i, :, :] + confusion_matrix(target_val, predict_val[0].round())
             cm_df = pd.DataFrame(cm.reshape((cm.shape[0], 4)), columns=cm_df_cols)
             results_df = exp_df.join(cm_df)

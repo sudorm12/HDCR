@@ -114,7 +114,7 @@ class MultiLSTMWithMetadata:
                  sequence_dense_layers=1, meta_dense_layers=1, comb_dense_layers=1,
                  sequence_dense_width=32, meta_dense_width=32, comb_dense_width=32,
                  sequence_l2_reg=0, meta_l2_reg=0, comb_l2_reg=0,
-                 lstm_units=8,
+                 lstm_units=8, lstm_l2_reg=0, lstm_gpu=False,
                  num_epochs=5, batch_size=32):
 
         """
@@ -132,8 +132,12 @@ class MultiLSTMWithMetadata:
                                     name='lstm_input_{}'.format(i)))
             reshaped_input = Reshape(sequence_shape, 
                                      name='reshaped_input_{}'.format(i))(lstm_input)
-            lstm = LSTM(lstm_units, activation='relu', go_backwards=False, 
-                        name='lstm_{}'.format(i))(reshaped_input)
+            if lstm_gpu:
+                lstm = CuDNNLSTM(lstm_units, kernel_regularizer=l2(lstm_l2_reg),
+                                 name='lstm_{}'.format(i))(reshaped_input)
+            else:
+                lstm = LSTM(lstm_units, kernel_regularizer=l2(lstm_l2_reg),
+                            name='lstm_{}'.format(i))(reshaped_input)
             for j in range(sequence_dense_layers):
                 lstm = Dense(sequence_dense_width, activation='relu', kernel_regularizer=l2(sequence_l2_reg),
                             name='seq_dense_{}_{}'.format(i, j))(lstm)
