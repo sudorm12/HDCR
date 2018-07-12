@@ -64,6 +64,7 @@ def compare_models():
 
         # TODO: new model performing 1D convolution on time series data
 
+
 def lstm_grid_search():
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -74,14 +75,17 @@ def lstm_grid_search():
     sequence_length = 25
 
     hyperparameters = {
-        'sequence_dense_layers': [0, 1],
+        'sequence_dense_layers': [0],
         'sequence_dense_width': [4, 8],
         'sequence_l2_reg': [0],
-        'meta_dense_layers': [0, 1],
-        'meta_dense_width': [32, 64],
-        'meta_l2_reg': [0, 1e-5],
+        'meta_dense_layers': [1, 2],
+        'meta_dense_width': [64],
+        'meta_l2_reg': [1e-5],
         'comb_dense_layers': [0, 1],
-        'lstm_units': [4, 8]
+        'comb_dense_width': [32, 64],
+        'lstm_units': [32, 64],
+        'lstm_l2_reg': [1e-5, 1e-6],
+        'batch_size': [2048]
     }
 
     keys, values = zip(*hyperparameters.items())
@@ -124,6 +128,7 @@ def lstm_grid_search():
             cm_df = pd.DataFrame(cm.reshape((cm.shape[0], 4)), columns=cm_df_cols)
             results_df = exp_df.join(cm_df)
             results_df.to_csv(results_path)
+
 
 def grid_search(model_class, data_loader, 
                 loader_args=None, model_args=None, hp_file=NotImplemented, 
@@ -191,8 +196,10 @@ def grid_search(model_class, data_loader,
             # TODO: also store run time
             results_df.to_csv(results_path)
 
+
 def predict_test():
     pass
+
 
 if __name__ == "__main__":
     lstm_grid_search()

@@ -66,7 +66,7 @@ class LSTMWithMetadata:
         lstm_input = Input(shape=(sequence_length * sequence_features,), 
                            name='lstm_input')
         reshaped_input = Reshape((sequence_length, sequence_features), 
-                                  name='reshaped_input')(lstm_input)
+                                 name='reshaped_input')(lstm_input)
         if lstm_gpu:
             lstm = CuDNNLSTM(lstm_units, kernel_regularizer=l2(lstm_l2_reg), 
                              name='lstm')(reshaped_input)
@@ -140,7 +140,7 @@ class MultiLSTMWithMetadata:
                             name='lstm_{}'.format(i))(reshaped_input)
             for j in range(sequence_dense_layers):
                 lstm = Dense(sequence_dense_width, activation='relu', kernel_regularizer=l2(sequence_l2_reg),
-                            name='seq_dense_{}_{}'.format(i, j))(lstm)
+                             name='seq_dense_{}_{}'.format(i, j))(lstm)
             lstm_output.append(Dense(1, activation='sigmoid', name='lstm_output_{}'.format(i))(lstm))
 
         meta_input = Input(shape=input_shapes[0], name='meta_input')
