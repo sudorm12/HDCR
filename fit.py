@@ -85,7 +85,8 @@ def lstm_grid_search():
         'comb_dense_width': [32, 64],
         'lstm_units': [32, 64],
         'lstm_l2_reg': [1e-5, 1e-6],
-        'batch_size': [2048]
+        'batch_size': [2048],
+        'lstm_gpu': [True]
     }
 
     keys, values = zip(*hyperparameters.items())
