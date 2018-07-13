@@ -1,13 +1,14 @@
+import argparse
 import logging
 import itertools
 from datetime import datetime
 import numpy as np
 import pandas as pd
-from prepare_data import HCDRLoader
+from prepare_data import HCDRLoader, HCDRDataLoader
 from sklearn.model_selection import KFold
 from sklearn.metrics import confusion_matrix
 from imblearn.over_sampling import RandomOverSampler
-from models import LinearNN, GBC, ABC, LSTMWithMetadata
+from models import LinearNN, GBC, ABC, LSTMWithMetadata, MultiLSTMWithMetadata
 
 
 def compare_models():
@@ -134,9 +135,17 @@ def lstm_grid_search():
 def grid_search(model_class, data_loader, 
                 loader_args=None, model_args=None, hp_file=NotImplemented, 
                 folds=4, random_oversample=False):
-
-    # TODO: implement using generic data loader methods
-    # TODO: this needs to be one of the loader args: sequence_length = 25
+    """
+    Perform grid search over hyperparameters over given models.
+    :param model_class:
+    :param data_loader:
+    :param loader_args:
+    :param model_args:
+    :param hp_file:
+    :param folds:
+    :param random_oversample:
+    :return:
+    """
     loader = data_loader(**loader_args)
 
     # load index values from main table
@@ -200,6 +209,21 @@ def grid_search(model_class, data_loader,
 
 def predict_test():
     pass
+
+
+def new_main():
+    # TODO: test new grid search method
+    loader_args = {
+        'cc_tmax': 50
+    }
+
+    model_args = {
+        'epochs': 25
+    }
+
+    grid_search(MultiLSTMWithMetadata, HCDRDataLoader,
+                loader_args=loader_args, model_args=model_args,
+                random_oversample=True)
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ from sklearn.linear_model import LinearRegression
 from scipy.sparse import csr_matrix
 from loader import DataLoader
 
-# TODO: determine standardized data loader methods
+
 class HCDRLoader:
     def __init__(self, data_dir='data'):
         logging.debug('Initializing data loader')
@@ -291,58 +291,62 @@ class HCDRLoader:
         return df_clean
 
 
-# TODO: conform class to DataLoader specification
 class HCDRDataLoader(DataLoader):
     def __init__(self, cc_tmax=25, data_dir='data'):
+        super().__init__()
         logging.debug('Initializing data loader')
+
         self._data_dir = data_dir
-        self._cc_tmax = 25
+        self._cc_tmax = cc_tmax
+
         self._curr_home_imputer = SoftImpute()
         self._amt_gp_lr = LinearRegression()
         self._amt_an_lr = LinearRegression()
         self._st_pca = None
         self._num_scaler = StandardScaler()
+
         self._mean_imp_cols = None
         self._mean_imp_means = None
 
-        logging.debug('Reading application_train.csv...')
         self._applications = pd.read_csv('{}/application_train.csv'.format(data_dir), index_col="SK_ID_CURR")
-        logging.debug('Finished reading application_train.csv')
-
-        logging.debug('Loading bureau data...')
         self._bureau_summary = self.read_bureau()
-        logging.debug('Loading previous application data...')
         self._previous_summary = self.read_previous_application()
-        logging.debug('Done')
+        self._input_shape = None
 
-    def load_train_val(self, train_index, val_index):
+    def get_index(self):
+        return self._applications.index
+
+    def load_train_data(self, split_index=None, fit_transform=True):
         # load each of the available data tables
-        applications_train = self.read_applications(train_index)
-        applications_val = self.read_applications(val_index, fit_transform=False)
-        
-        # join the dataframes together and fill nas with zeros
-        logging.debug('Collating training data...')
-        joined_train = applications_train.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
-                                                                                             rsuffix='_PREVIOUS')
+        applications = self.read_applications(split_index, fit_transform=fit_transform)
+        joined_train = applications.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
+                                                                                       rsuffix='_PREVIOUS')
+
         full_data_train = joined_train.combine_first(joined_train.select_dtypes(include=[np.number]).fillna(0))
-        logging.debug('Collating validation data...')
-        joined_val = applications_val.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
-                                                                                         rsuffix='_PREVIOUS')
-        full_data_val = joined_val.combine_first(joined_val.select_dtypes(include=[np.number]).fillna(0))
 
-        # split full data into features and target
-        data_train = full_data_train.drop('TARGET', axis=1)
+        # split into features and target
+        meta_data_train = full_data_train.drop('TARGET', axis=1)
         target_train = full_data_train['TARGET']
-        data_val = full_data_val.drop('TARGET', axis=1)
-        target_val = full_data_val['TARGET']
 
-        # scale numeric columns before returning
-        logging.debug('Scaling train and validation data...')
-        data_train = self._num_scaler.fit_transform(data_train.loc[:, data_train.dtypes == np.number])
-        data_val = self._num_scaler.transform(data_val.loc[:, data_val.dtypes == np.number])
+        # scale to zero mean and unit variance
+        meta_data_train = self._num_scaler.fit_transform(meta_data_train.loc[:, meta_data_train.dtypes == np.number])
 
-        logging.debug('Done')
-        return data_train, target_train, data_val, target_val
+        cc_data_train = self.read_credit_card_balance(self._applications.index.values[split_index],
+                                                      t_max=self._cc_tmax)
+        data_train = [meta_data_train, cc_data_train]
+
+        # TODO: determine input shapes here
+        meta_data_shape = None
+        ts_data_shape = None
+        self._input_shape = [meta_data_shape, *ts_data_shape]
+
+        return data_train, target_train
+
+    def load_test_data(self):
+        raise NotImplementedError
+
+    def get_input_shape(self):
+        return self._input_shape
 
     def read_applications(self, split_index=None, fit_transform=True):
         logging.debug('Preparing applications data...')
@@ -466,7 +470,7 @@ class HCDRDataLoader(DataLoader):
         # read cc balance csv and full list of id values
         logging.debug('Reading credit card balance file...')
         credit_card_balance = pd.read_csv('{}/credit_card_balance.csv'.format(self._data_dir))
-        app_ix = self.applications_train_index()
+        app_ix = self.get_index()
 
         # convert categorical columns to dummy values
         credit_card_balance = self._cat_data_dummies(credit_card_balance)
@@ -496,42 +500,3 @@ class HCDRDataLoader(DataLoader):
 
         logging.debug('Done')
         return cc_ts_sparse
-
-    def read_credit_card_balance_3d(self, sk_ids=None):
-        # read cc balance csv and full list of id values
-        logging.debug('Reading credit card balance file...')
-        credit_card_balance = pd.read_csv('{}/credit_card_balance.csv'.format(self._data_dir))
-        app_ix = self.applications_train_index()
-
-        # convert categorical columns to dummy values
-        credit_card_balance = self._cat_data_dummies(credit_card_balance)
-
-        if sk_ids is None:
-            sk_ids = app_ix.values
-        credit_card_balance = credit_card_balance[credit_card_balance['SK_ID_CURR'].isin(sk_ids)]
-
-        # fill missing id values
-        missing_ids = app_ix[~app_ix.isin(credit_card_balance['SK_ID_CURR'].unique())].values
-        missing_df = pd.DataFrame({'SK_ID_CURR': missing_ids})
-        missing_df['MONTHS_BALANCE'] = -1
-
-        # mix it all around
-        logging.debug('Preparing credit card balance data...')
-        cc_ts_summary = (credit_card_balance
-                         .append(missing_df)
-                         .drop(['SK_ID_PREV'], axis=1)
-                         .groupby(['SK_ID_CURR', 'MONTHS_BALANCE']).sum()
-                         .unstack().stack(dropna=False).stack(dropna=False)
-                         .to_sparse())
-        
-        # create a numpy array
-        shape = list(map(len, cc_ts_summary.index.levels))
-        arr = np.full(shape, np.nan)
-        arr[cc_ts_summary.index.labels] = cc_ts_summary.to_dense().values.flat
-
-        # track index of numpy array
-        cc_id_index = cc_ts_summary.index.get_level_values(cc_ts_summary.index.names[0]).unique()
-
-        logging.debug('Done')
-        return arr, cc_id_index
-

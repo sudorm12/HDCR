@@ -1,5 +1,6 @@
 import pandas as pd
 
+
 class DataLoader:
     def __init__(self):
         pass
@@ -26,12 +27,14 @@ class DataLoader:
         test_data, test_target = self.load_test_data()
         return train_data, train_target, test_data, test_target
 
-    def _yn_cols_to_boolean(self, df, cols):
+    @staticmethod
+    def _yn_cols_to_boolean(df, cols):
         yn_map = {'Y': 1,
                   'N': 0}
         return df[cols].replace(yn_map)
 
-    def _cat_data(self, df):
+    @staticmethod
+    def _cat_data(df):
         df_clean = df.copy()
 
         # detect columns with dtype 'object'
