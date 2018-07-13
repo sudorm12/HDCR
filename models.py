@@ -115,21 +115,23 @@ class MultiLSTMWithMetadata:
                  sequence_dense_width=32, meta_dense_width=32, comb_dense_width=32,
                  sequence_l2_reg=0, meta_l2_reg=0, comb_l2_reg=0,
                  lstm_units=8, lstm_l2_reg=0, lstm_gpu=False,
-                 num_epochs=5, batch_size=32):
+                 epochs=5, batch_size=256):
 
         """
         input_shapes: a list of tuples indicating shape of each input, meta first as
         shape (meta_features,) and then sequence shapes as (sequence_lengths, sequence_features)
         """
         self._num_seq_inputs = len(input_shapes) - 1
-        self._num_epochs = num_epochs
+        self._num_epochs = epochs
         self._batch_size = batch_size
 
-        lstm_input = []
-        lstm_output = []
+        lstm_inputs = []
+        lstm_outputs = []
+        lstm_forward = []
         for i, sequence_shape in enumerate(input_shapes[1:]):
-            lstm_input.append(Input(shape=(sequence_shape[0] * sequence_shape[1],), 
-                                    name='lstm_input_{}'.format(i)))
+            lstm_input = Input(shape=(sequence_shape[0] * sequence_shape[1],), 
+                                    name='lstm_input_{}'.format(i))
+            lstm_inputs.append(lstm_input)
             reshaped_input = Reshape(sequence_shape, 
                                      name='reshaped_input_{}'.format(i))(lstm_input)
             if lstm_gpu:
@@ -141,7 +143,8 @@ class MultiLSTMWithMetadata:
             for j in range(sequence_dense_layers):
                 lstm = Dense(sequence_dense_width, activation='relu', kernel_regularizer=l2(sequence_l2_reg),
                              name='seq_dense_{}_{}'.format(i, j))(lstm)
-            lstm_output.append(Dense(1, activation='sigmoid', name='lstm_output_{}'.format(i))(lstm))
+            lstm_forward.append(lstm)
+            lstm_outputs.append(Dense(1, activation='sigmoid', name='lstm_output_{}'.format(i))(lstm))
 
         meta_input = Input(shape=input_shapes[0], name='meta_input')
         meta_dense = meta_input
@@ -149,13 +152,13 @@ class MultiLSTMWithMetadata:
             meta_dense = Dense(meta_dense_width, activation='relu', kernel_regularizer=l2(meta_l2_reg),
                                name='meta_dense_{}'.format(i))(meta_dense)
 
-        x = concatenate([*lstm, meta_dense], name='concatenate')
+        x = concatenate([*lstm_forward, meta_dense], name='concatenate')
         for i in range(comb_dense_layers):
             x = Dense(comb_dense_width, activation='relu', kernel_regularizer=l2(comb_l2_reg),
                       name='combined_dense_{}'.format(i))(x)
         main_output = Dense(1, activation='sigmoid', name='main_output')(x)
 
-        self._model = Model(inputs=[*lstm_input, meta_input], outputs=[main_output, *lstm_output])
+        self._model = Model(inputs=[meta_input, *lstm_inputs], outputs=[main_output, *lstm_outputs])
 
         self._model.compile(optimizer='rmsprop',
                             loss='binary_crossentropy',

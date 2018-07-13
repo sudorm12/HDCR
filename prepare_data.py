@@ -331,14 +331,14 @@ class HCDRDataLoader(DataLoader):
         # scale to zero mean and unit variance
         meta_data_train = self._num_scaler.fit_transform(meta_data_train.loc[:, meta_data_train.dtypes == np.number])
 
-        cc_data_train = self.read_credit_card_balance(self._applications.index.values[split_index],
-                                                      t_max=self._cc_tmax)
+        cc_data_train = self.read_credit_card_balance(self._applications.index.values[split_index])
         data_train = [meta_data_train, cc_data_train]
 
-        # TODO: determine input shapes here
-        meta_data_shape = None
-        ts_data_shape = None
-        self._input_shape = [meta_data_shape, *ts_data_shape]
+        # determine input shapes
+        meta_data_shape = tuple([data_train[0].shape[1]])
+        ts_data_shape = tuple([self._cc_tmax, int(cc_data_train.shape[1] / self._cc_tmax)])
+        self._input_shape = [meta_data_shape, ts_data_shape]
+        logging.debug(self._input_shape)
 
         return data_train, target_train
 
@@ -466,7 +466,7 @@ class HCDRDataLoader(DataLoader):
         prev_app_summary = previous_clean.groupby('SK_ID_CURR').sum()
         return prev_app_summary
 
-    def read_credit_card_balance(self, sk_ids=None, t_max=100):
+    def read_credit_card_balance(self, sk_ids=None):
         # read cc balance csv and full list of id values
         logging.debug('Reading credit card balance file...')
         credit_card_balance = pd.read_csv('{}/credit_card_balance.csv'.format(self._data_dir))
@@ -492,7 +492,7 @@ class HCDRDataLoader(DataLoader):
                          .drop(['SK_ID_PREV'], axis=1)
                          .fillna(0)
                          .groupby(['SK_ID_CURR', 'MONTHS_BALANCE']).sum()
-                         .unstack(level=0).reindex(np.arange(-t_max, 0)).stack(dropna=False)
+                         .unstack(level=0).reindex(np.arange(-self._cc_tmax, 0)).stack(dropna=False)
                          .swaplevel(0, 1).sort_index().unstack())
 
         logging.debug('Sparsifying...')

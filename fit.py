@@ -31,8 +31,6 @@ def compare_models():
                                                               target_train)
         data_train_os = data_train[data_train_os_index.squeeze()]
 
-        # TODO: create new dated log file for each run, store model name and oos accuracies for each fold
-
         # train on linear neural network
         linear_nn = LinearNN(data_train_os.shape[1])
         linear_nn.fit(data_train_os, target_train_os, data_val, target_val)
@@ -187,8 +185,9 @@ def grid_search(model_class, data_loader,
         # oversample to correct for class imbalance
         if random_oversample:
             ros = RandomOverSampler()
-            data_train_os_index, target_train = ros.fit_sample(np.arange(data_train.shape[0]).reshape(-1, 1), target_train)
-            data_train = data_train[data_train_os_index.squeeze()]
+            os_index, target_train_temp = ros.fit_sample(np.arange(data_train[0].shape[0]).reshape(-1, 1), target_train)
+            data_train = [data_train_part[os_index.squeeze()] for data_train_part in data_train]
+            target_train = target_train_temp
 
         logging.debug('Fold {} of {}'.format(j + 1, folds))
         
@@ -212,7 +211,6 @@ def predict_test():
 
 
 def new_main():
-    # TODO: test new grid search method
     loader_args = {
         'cc_tmax': 50
     }
