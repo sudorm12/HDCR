@@ -183,7 +183,7 @@ class MultiLSTMWithMetadata:
         return history
 
     def predict(self, data):
-        return self._model.predict(data)
+        return self._model.predict(data)[0]
 
     def model_summary(self):
         return self._model.summary()

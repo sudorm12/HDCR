@@ -198,8 +198,7 @@ def grid_search(model_class, data_loader,
             history = model.fit(data_train, target_train, data_val, target_val)
             predict_val = model.predict(data_val)
 
-            # TODO: simple models may only have one item in predict_val
-            cm[i, :, :] = cm[i, :, :] + confusion_matrix(target_val, predict_val[0].round())
+            cm[i, :, :] = cm[i, :, :] + confusion_matrix(target_val, predict_val.round())
             cm_df = pd.DataFrame(cm.reshape((cm.shape[0], 4)), columns=cm_df_cols)
             results_df = exp_df.join(cm_df)
             # TODO: also store run time
