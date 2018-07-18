@@ -212,7 +212,8 @@ def predict_test():
 
 def new_main():
     loader_args = {
-        'cc_tmax': 50
+        'cc_tmax': 50,
+        'bureau_tmax': 50
     }
 
     model_args = {
@@ -225,4 +226,4 @@ def new_main():
 
 
 if __name__ == "__main__":
-    lstm_grid_search()
+    new_main()

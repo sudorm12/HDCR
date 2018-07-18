@@ -128,38 +128,48 @@ class MultiLSTMWithMetadata:
         lstm_inputs = []
         lstm_outputs = []
         lstm_forward = []
+
+        # build up the lstm network for each time series input
         for i, sequence_shape in enumerate(input_shapes[1:]):
+            # lstm input and reshape from flat to sequence length x features shape
             lstm_input = Input(shape=(sequence_shape[0] * sequence_shape[1],), 
-                                    name='lstm_input_{}'.format(i))
+                               name='lstm_input_{}'.format(i))
             lstm_inputs.append(lstm_input)
+
             reshaped_input = Reshape(sequence_shape, 
                                      name='reshaped_input_{}'.format(i))(lstm_input)
+
+            # lstm layer selected based on gpu acceleration
             if lstm_gpu:
                 lstm = CuDNNLSTM(lstm_units, kernel_regularizer=l2(lstm_l2_reg),
                                  name='lstm_{}'.format(i))(reshaped_input)
             else:
                 lstm = LSTM(lstm_units, kernel_regularizer=l2(lstm_l2_reg),
                             name='lstm_{}'.format(i))(reshaped_input)
+
+            # add dense layers to output of lstm
             for j in range(sequence_dense_layers):
                 lstm = Dense(sequence_dense_width, activation='relu', kernel_regularizer=l2(sequence_l2_reg),
                              name='seq_dense_{}_{}'.format(i, j))(lstm)
             lstm_forward.append(lstm)
             lstm_outputs.append(Dense(1, activation='sigmoid', name='lstm_output_{}'.format(i))(lstm))
 
+        # meta data input and dense layers
         meta_input = Input(shape=input_shapes[0], name='meta_input')
         meta_dense = meta_input
         for i in range(meta_dense_layers):
             meta_dense = Dense(meta_dense_width, activation='relu', kernel_regularizer=l2(meta_l2_reg),
                                name='meta_dense_{}'.format(i))(meta_dense)
 
+        # combine metadata and sequence outputs and add dense layers
         x = concatenate([*lstm_forward, meta_dense], name='concatenate')
         for i in range(comb_dense_layers):
             x = Dense(comb_dense_width, activation='relu', kernel_regularizer=l2(comb_l2_reg),
                       name='combined_dense_{}'.format(i))(x)
         main_output = Dense(1, activation='sigmoid', name='main_output')(x)
 
+        # initialize and compile keras model
         self._model = Model(inputs=[meta_input, *lstm_inputs], outputs=[main_output, *lstm_outputs])
-
         self._model.compile(optimizer='rmsprop',
                             loss='binary_crossentropy',
                             loss_weights=[1.] + [0.2] * self._num_seq_inputs,
