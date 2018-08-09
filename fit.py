@@ -153,12 +153,14 @@ def grid_search(model_class, data_loader,
     hyperparameters = {
         'sequence_dense_layers': [0, 1],
         'sequence_dense_width': [4, 8],
-        'sequence_l2_reg': [0],
+        'sequence_l2_reg': [0, 1e-5],
         'meta_dense_layers': [0, 1],
         'meta_dense_width': [32, 64],
         'meta_l2_reg': [0, 1e-5],
-        'comb_dense_layers': [0, 1],
-        'lstm_units': [4, 8]
+        'comb_dense_layers': [0, 1, 2],
+        'comb_dense_width': [32, 64],
+        'lstm_units': [4, 8, 16],
+        'lstm_l2_reg': [0, 1e-5],
     }
 
     # create a list of dicts with hyperparameters for each experiment to run
@@ -216,7 +218,9 @@ def new_main():
     }
 
     model_args = {
-        'epochs': 25
+        'epochs': 25,
+        'batch_size': 512,
+        'lstm_gpu': True
     }
 
     grid_search(MultiLSTMWithMetadata, HCDRDataLoader,
