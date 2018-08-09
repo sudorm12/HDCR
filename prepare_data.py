@@ -292,13 +292,14 @@ class HCDRLoader:
 
 
 class HCDRDataLoader(DataLoader):
-    def __init__(self, cc_tmax=25, bureau_tmax=25, data_dir='data'):
+    def __init__(self, cc_tmax=25, bureau_tmax=25, pos_tmax=25, data_dir='data'):
         super().__init__()
         logging.debug('Initializing data loader')
 
         self._data_dir = data_dir
         self._cc_tmax = cc_tmax
         self._bureau_tmax = bureau_tmax
+        self._pos_tmax = pos_tmax
 
         self._curr_home_imputer = SoftImpute()
         self._amt_gp_lr = LinearRegression()
@@ -334,12 +335,15 @@ class HCDRDataLoader(DataLoader):
 
         cc_data_train = self.read_credit_card_balance(self._applications.index.values[split_index])
         bureau_data_train = self.read_bureau_balance(self._applications.index.values[split_index])
-        data_train = [meta_data_train, cc_data_train, bureau_data_train]
+        pos_cash_data_train = self.read_pos_cash(self._applications.index.values[split_index])
+
+        data_train = [meta_data_train, cc_data_train, bureau_data_train, pos_cash_data_train]
 
         # determine input shapes
         meta_data_shape = tuple([data_train[0].shape[1]])
         ts_data_shape = [tuple([self._cc_tmax, int(cc_data_train.shape[1] / self._cc_tmax)]),
-                         tuple([self._bureau_tmax, int(bureau_data_train.shape[1] / self._bureau_tmax)])]
+                         tuple([self._bureau_tmax, int(bureau_data_train.shape[1] / self._bureau_tmax)]),
+                         tuple([self._pos_tmax, int(pos_cash_data_train.shape[1] / self._pos_tmax)])]
         self._input_shape = [meta_data_shape, *ts_data_shape]
         logging.debug(self._input_shape)
 
@@ -509,6 +513,7 @@ class HCDRDataLoader(DataLoader):
         bureau_balance = pd.read_csv('{}/bureau_balance.csv'.format(self._data_dir))
         bureau = pd.read_csv('data/bureau.csv')
         id_xref = bureau[['SK_ID_CURR', 'SK_ID_BUREAU']]
+        app_ix = self.get_index()
 
         # merge bureau ids with application ids
         bureau_balance = bureau_balance.merge(id_xref).drop(['SK_ID_BUREAU'], axis=1)
@@ -536,3 +541,31 @@ class HCDRDataLoader(DataLoader):
         bureau_sparse = csr_matrix(bureau_ts_summary.fillna(0).values)
 
         return bureau_sparse
+
+    def read_pos_cash(self, sk_ids=None):
+        # read pos cash csv and full list of id values
+        pos_cash = pd.read_csv('data/POS_CASH_balance.csv')
+        bureau = pd.read_csv('data/bureau.csv')
+        id_xref = bureau[['SK_ID_CURR', 'SK_ID_BUREAU']]
+        app_ix = self.get_index()
+
+        pos_cash = pos_cash.merge(id_xref)
+        pos_cash = self._cat_data_dummies(pos_cash).drop(['SK_ID_BUREAU', 'SK_ID_PREV'], axis=1)
+
+        if sk_ids is None:
+            sk_ids = app_ix.values
+        pos_cash = pos_cash[pos_cash['SK_ID_CURR'].isin(sk_ids)]
+
+        # fill missing id values
+        missing_ids = sk_ids[~np.isin(sk_ids, pos_cash['SK_ID_CURR'].unique())]
+        missing_df = pd.DataFrame({'SK_ID_CURR': missing_ids})
+        missing_df['MONTHS_BALANCE'] = -1
+
+        pos_cash_summary = (pos_cash
+                            .append(missing_df)
+                            .fillna(0)
+                            .groupby(['SK_ID_CURR', 'MONTHS_BALANCE']).sum()
+                            .unstack(level=0).reindex(np.arange(-self._pos_tmax, 0)).stack(dropna=False)
+                            .swaplevel(0, 1).sort_index().unstack())
+
+        return pos_cash_summary.fillna(0).values
