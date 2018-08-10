@@ -152,15 +152,16 @@ def grid_search(model_class, data_loader,
     # TODO: load hyperparameters from file
     hyperparameters = {
         'sequence_dense_layers': [0, 1],
-        'sequence_dense_width': [4, 8],
-        'sequence_l2_reg': [0, 1e-5],
-        'meta_dense_layers': [0, 1],
-        'meta_dense_width': [32, 64],
-        'meta_l2_reg': [0, 1e-5],
-        'comb_dense_layers': [0, 1, 2],
-        'comb_dense_width': [32, 64],
-        'lstm_units': [4, 8, 16],
-        'lstm_l2_reg': [0, 1e-5],
+        'sequence_dense_width': [8],
+        'sequence_l2_reg': [0],
+        'meta_dense_layers': [1],
+        'meta_dense_width': [64],
+        'meta_l2_reg': [1e-5],
+        'comb_dense_layers': [1, 2],
+        'comb_dense_width': [64],
+        'comb_l2_reg': [1e-5],
+        'lstm_units': [8, 16],
+        'lstm_l2_reg': [1e-7, 1e-5],
     }
 
     # create a list of dicts with hyperparameters for each experiment to run
