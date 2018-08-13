@@ -1,6 +1,6 @@
 import logging
 from keras.models import Sequential, Model
-from keras.layers import CuDNNLSTM, LSTM, Dense, Input, Reshape, concatenate
+from keras.layers import CuDNNLSTM, LSTM, Dense, Dropout, Input, Reshape, concatenate
 from keras.regularizers import l2
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
 
@@ -114,6 +114,7 @@ class MultiLSTMWithMetadata:
                  sequence_dense_layers=1, meta_dense_layers=1, comb_dense_layers=1,
                  sequence_dense_width=32, meta_dense_width=32, comb_dense_width=32,
                  sequence_l2_reg=0, meta_l2_reg=0, comb_l2_reg=0,
+                 sequence_dropout=0, meta_dropout=0, comb_dropout=0,
                  lstm_units=8, lstm_l2_reg=0, lstm_gpu=False,
                  epochs=5, batch_size=256):
 
@@ -151,6 +152,8 @@ class MultiLSTMWithMetadata:
             for j in range(sequence_dense_layers):
                 lstm = Dense(sequence_dense_width, activation='relu', kernel_regularizer=l2(sequence_l2_reg),
                              name='seq_dense_{}_{}'.format(i, j))(lstm)
+                lstm = Dropout(sequence_dropout,
+                               name='lstm_dropout_{}'.format(i))(lstm)
             lstm_forward.append(lstm)
             lstm_outputs.append(Dense(1, activation='sigmoid', name='lstm_output_{}'.format(i))(lstm))
 
@@ -160,12 +163,16 @@ class MultiLSTMWithMetadata:
         for i in range(meta_dense_layers):
             meta_dense = Dense(meta_dense_width, activation='relu', kernel_regularizer=l2(meta_l2_reg),
                                name='meta_dense_{}'.format(i))(meta_dense)
+            meta_dense = Dropout(meta_dropout,
+                                 name='meta_dropout_{}'.format(i))(meta_dense)
 
         # combine metadata and sequence outputs and add dense layers
         x = concatenate([*lstm_forward, meta_dense], name='concatenate')
         for i in range(comb_dense_layers):
             x = Dense(comb_dense_width, activation='relu', kernel_regularizer=l2(comb_l2_reg),
                       name='combined_dense_{}'.format(i))(x)
+            x = Dropout(rate=comb_dropout,
+                        name='combined_dropout_{}'.format(i))(x)
         main_output = Dense(1, activation='sigmoid', name='main_output')(x)
 
         # initialize and compile keras model

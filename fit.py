@@ -1,4 +1,5 @@
 import argparse
+import ast
 import logging
 import itertools
 from datetime import datetime
@@ -130,8 +131,8 @@ def lstm_grid_search():
             results_df.to_csv(results_path)
 
 
-def grid_search(model_class, data_loader, 
-                loader_args=None, model_args=None, hp_file=NotImplemented, 
+def grid_search(model_class, data_loader, hp_file,
+                loader_args=None, model_args=None,
                 folds=4, random_oversample=False):
     """
     Perform grid search over hyperparameters over given models.
@@ -149,20 +150,9 @@ def grid_search(model_class, data_loader,
     # load index values from main table
     data_ix = loader.get_index()
     
-    # TODO: load hyperparameters from file
-    hyperparameters = {
-        'sequence_dense_layers': [0],
-        'sequence_dense_width': [8],
-        'sequence_l2_reg': [0],
-        'meta_dense_layers': [1],
-        'meta_dense_width': [64],
-        'meta_l2_reg': [1e-5],
-        'comb_dense_layers': [1],
-        'comb_dense_width': [64],
-        'comb_l2_reg': [1e-5],
-        'lstm_units': [16, 32, 64],
-        'lstm_l2_reg': [1e-6, 1e-7, 1e-8],
-    }
+    # load hyperparameters from file
+    with open(hp_file, 'r') as f:
+        hyperparameters = ast.literal_eval(f.read())
 
     # create a list of dicts with hyperparameters for each experiment to run
     keys, values = zip(*hyperparameters.items())
@@ -170,7 +160,6 @@ def grid_search(model_class, data_loader,
     exp_df = pd.DataFrame(experiments)
 
     # prepare for storing confusion matrix and accuracy results to file
-    # TODO: store oos accuracy per epoch
     cm = np.zeros((len(experiments), 2, 2), dtype=int)
     cm_df_cols = ['CM True Neg', 'CM False Pos', 'CM False Neg', 'CM True Pos']
     results_path = 'results/gridsearch_results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
@@ -214,8 +203,9 @@ def predict_test():
 
 def new_main():
     loader_args = {
-        'cc_tmax': 50,
-        'bureau_tmax': 50
+        'cc_tmax': 60,
+        'bureau_tmax': 60,
+        'pos_tmax': 60
     }
 
     model_args = {
@@ -225,6 +215,7 @@ def new_main():
     }
 
     grid_search(MultiLSTMWithMetadata, HCDRDataLoader,
+                hp_file='grid_search_params.txt',
                 loader_args=loader_args, model_args=model_args,
                 random_oversample=True)
 
