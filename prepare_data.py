@@ -72,6 +72,7 @@ class HCDRDataLoader(DataLoader):
         return data_train, target_train
 
     def load_test_data(self):
+        # TODO: add load_time_series
         # load each of the available data tables
         applications = self.read_applications(split_index=None, fit_transform=False)
         joined_train = applications.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
@@ -152,9 +153,6 @@ class HCDRDataLoader(DataLoader):
 
         apps_clean = apps_clean.join(home_stats_pca)
         apps_clean = apps_clean.drop(stat_cols, axis=1)
-
-        # age of car if owned
-        # TODO: impute car age with average, if client owns a car
 
         # impute all credit bureau requests with zero, except past year with one
         app_credit_cols = apps_clean.columns[apps_clean.columns.str.contains('AMT_REQ_CREDIT_BUREAU')]
@@ -281,6 +279,7 @@ class HCDRDataLoader(DataLoader):
         missing_df = pd.DataFrame({'SK_ID_CURR': missing_ids})
         missing_df['MONTHS_BALANCE'] = -1
 
+        logging.debug('Preparing credit bureau balance data...')
         bureau_ts_summary = (bureau_balance
                              .append(missing_df)
                              .fillna(0)
@@ -311,6 +310,7 @@ class HCDRDataLoader(DataLoader):
         missing_df = pd.DataFrame({'SK_ID_CURR': missing_ids})
         missing_df['MONTHS_BALANCE'] = -1
 
+        logging.debug('Preparing POS cash data...')
         pos_cash_summary = (pos_cash
                             .append(missing_df)
                             .fillna(0)

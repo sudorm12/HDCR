@@ -5,17 +5,17 @@ import itertools
 from datetime import datetime
 import numpy as np
 import pandas as pd
-from prepare_data import HCDRLoader, HCDRDataLoader
+from prepare_data import HCDRDataLoader
 from sklearn.model_selection import KFold
 from sklearn.metrics import confusion_matrix
 from imblearn.over_sampling import RandomOverSampler
-from models import LinearNN, GBC, ABC, LSTMWithMetadata, MultiLSTMWithMetadata
+from models import LinearNN, GBC, ABC, MultiLSTMWithMetadata
 
 
 def compare_models():
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    loader = HCDRLoader()
+    loader = HCDRDataLoader()
 
     # load index values from main table
     app_ix = loader.applications_train_index()
@@ -56,7 +56,7 @@ def compare_models():
         meta_features = np.int(data_train.shape[1])
 
         # combined credit card balance lstm and dense metadata neural network
-        lstm_nn = LSTMWithMetadata(sequence_length, sequence_features, meta_features)
+        lstm_nn = MultiLSTMWithMetadata(sequence_length, sequence_features, meta_features)
         lstm_nn.fit(cc_data_train_os, data_train_os, target_train_os,
                     cc_data_val, data_val, target_val)
 
