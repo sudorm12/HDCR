@@ -287,8 +287,10 @@ class HCDRDataLoader(DataLoader):
                              .unstack(level=0).reindex(np.arange(-self._bureau_tmax, 0)).stack(dropna=False)
                              .swaplevel(0, 1).sort_index().unstack())
 
+        logging.debug('Sparsifying...')
         bureau_sparse = csr_matrix(bureau_ts_summary.fillna(0).values)
 
+        logging.debug('Done')
         return bureau_sparse
 
     def read_pos_cash(self, sk_ids=None):
@@ -318,4 +320,5 @@ class HCDRDataLoader(DataLoader):
                             .unstack(level=0).reindex(np.arange(-self._pos_tmax, 0)).stack(dropna=False)
                             .swaplevel(0, 1).sort_index().unstack())
 
+        logging.debug('Done')
         return pos_cash_summary.fillna(0).values
