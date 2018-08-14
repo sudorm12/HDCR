@@ -8,23 +8,23 @@ class DataLoader:
     def get_index(self):
         raise NotImplementedError
 
-    def load_train_data(self, split_index=None, fit_transform=True):
+    def load_train_data(self, split_index=None, fit_transform=True, **loader_args):
         raise NotImplementedError
 
-    def load_test_data(self):
+    def load_test_data(self, **loader_args):
         raise NotImplementedError
 
     def get_input_shape(self):
         raise NotImplementedError
 
-    def load_train_val(self, train_index, val_index):
-        train_data, train_target = self.load_train_data(split_index=train_index, fit_transform=True)
-        val_data, val_target = self.load_train_data(split_index=val_index, fit_transform=False)
+    def load_train_val(self, train_index, val_index, loader_args={}):
+        train_data, train_target = self.load_train_data(split_index=train_index, fit_transform=True, **loader_args)
+        val_data, val_target = self.load_train_data(split_index=val_index, fit_transform=False, **loader_args)
         return train_data, train_target, val_data, val_target
 
-    def load_train_test(self):
-        train_data, train_target = self.load_train_data(fit_transform=True)
-        test_data, test_target = self.load_test_data()
+    def load_train_test(self, loader_args={}):
+        train_data, train_target = self.load_train_data(fit_transform=True, **loader_args)
+        test_data, test_target = self.load_test_data(**loader_args)
         return train_data, train_target, test_data, test_target
 
     @staticmethod
