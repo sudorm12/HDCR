@@ -29,6 +29,7 @@ def ensemble_fit_predict():
     ros = RandomOverSampler()
     os_index, target_train_os = ros.fit_sample(np.arange(data_train[0].shape[0]).reshape(-1, 1), target_train)
     data_train_os = [data_train_part[os_index.squeeze()] for data_train_part in data_train]
+
     # use predict on out of sample data and store results for each model
     num_models = 4
     train_samples = data_train[0].shape[0]
@@ -58,7 +59,7 @@ def ensemble_fit_predict():
     val_results[:, 2] = abc.predict(data_val[0]).squeeze()
 
     model_args = {
-        'epochs': 5,
+        'epochs': 25,
         'batch_size': 512,
         'lstm_gpu': False,
         'sequence_dense_layers': 0,
@@ -87,7 +88,6 @@ def ensemble_fit_predict():
     lr = LogisticRegression(class_weight='balanced')
     lr.fit(train_results, target_train.values)
 
-    # TODO: collect SK_ID for out of sample data
     y = lr.predict(val_results)
 
     results_path = 'data/results/results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
@@ -179,7 +179,6 @@ def ensemble_fit_val():
     lr = LogisticRegression(class_weight='balanced')
     lr.fit(train_results, target_train_ts.values)
 
-    # TODO: collect SK_ID for out of sample data
     y = lr.predict(val_results)
 
     results = pd.DataFrame(np.concatenate([val_results, y.reshape(-1, 1), target_val_ts.values.reshape(-1, 1)], axis=1))
@@ -198,7 +197,6 @@ def hparam_grid_search():
     }
 
     model_args = {
-        'epochs': 25,
         'batch_size': 512,
         'lstm_gpu': True
     }
