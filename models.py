@@ -26,6 +26,7 @@ class LinearNN:
                             optimizer='Adam',
                             metrics=['accuracy'])
 
+    # TODO: make validation data optional
     def fit(self, data_train, target_train, data_val, target_val):
         self._model.fit(data_train, target_train,
                         epochs=self._epochs,
@@ -126,11 +127,12 @@ class MultiLSTMWithMetadata:
 
         # initialize and compile keras model
         self._model = Model(inputs=[meta_input, *lstm_inputs], outputs=[main_output, *lstm_outputs])
-        self._model.compile(optimizer='rmsprop',
+        self._model.compile(optimizer='adam',
                             loss='binary_crossentropy',
                             loss_weights=[1.] + [0.2] * self._num_seq_inputs,
                             metrics=['accuracy'])
 
+    # TODO: make validation data optional
     def fit(self, data_train, target_train, data_val, target_val):
         num_outputs = self._num_seq_inputs + 1
         history = self._model.fit(data_train, [target_train] * num_outputs,

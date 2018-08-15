@@ -1,137 +1,195 @@
-import argparse
-import ast
 import logging
-import itertools
-from datetime import datetime
 import numpy as np
 import pandas as pd
 from prepare_data import HCDRDataLoader
-from sklearn.model_selection import KFold
-from sklearn.metrics import confusion_matrix
+from sklearn.linear_model import LogisticRegression
 from imblearn.over_sampling import RandomOverSampler
+from sklearn.model_selection import KFold
 from models import LinearNN, GBC, ABC, MultiLSTMWithMetadata
+from grid_search import grid_search
 
 
-def compare_models():
+def ensemble_fit_predict():
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 
-    loader = HCDRDataLoader()
+    loader_args = {
+        'cc_tmax': 60,
+        'bureau_tmax': 60,
+        'pos_tmax': 60
+    }
 
-    # load index values from main table
-    app_ix = loader.applications_train_index()
+    loader = HCDRDataLoader(**loader_args)
 
-    # fit model using k-fold verification
-    kf = KFold(n_splits=2, shuffle=True)
+    # load training and test data
+    data_train, target_train = loader.load_train_data()
+    data_val = loader.load_test_data()
+
+    # oversample troubled loans to make up for imbalance
+    ros = RandomOverSampler()
+    os_index, target_train_os = ros.fit_sample(np.arange(data_train.shape[0]).reshape(-1, 1), target_train)
+    data_train_os = data_train[os_index.squeeze()]
+
+    # use predict on out of sample data and store results for each model
+    num_models = 4
+    train_samples = data_train[0].shape[0]
+    test_samples = data_val[0].shape[0]
+    train_results = np.empty((train_samples, num_models))
+    val_results = np.empty((test_samples, num_models))
+
+    # train on linear neural network
+    linear_nn = LinearNN(data_train_os[0].shape[1], epochs=25)
+    linear_nn.fit(data_train_os[0], target_train_os, data_val[0], target_val)
+
+    train_results[:, 0] = linear_nn.predict(data_train[0]).squeeze()
+    val_results[:, 0] = linear_nn.predict(data_val[0]).squeeze()
+
+    # gradient boosting classifier
+    gbc = GBC()
+    gbc.fit(data_train_os[0], target_train_os)
+
+    train_results[:, 1] = gbc.predict(data_train[0]).squeeze()
+    val_results[:, 1] = gbc.predict(data_val[0]).squeeze()
+
+    # adaboost classifier
+    abc = ABC()
+    abc.fit(data_train_os[0], target_train_os)
+
+    train_results[:, 2] = abc.predict(data_train[0]).squeeze()
+    val_results[:, 2] = abc.predict(data_val[0]).squeeze()
+
+    model_args = {
+        'epochs': 25,
+        'batch_size': 512,
+        'lstm_gpu': False,
+        'sequence_dense_layers': 0,
+        'sequence_dense_width': 8,
+        'sequence_l2_reg': 0,
+        'meta_dense_layers': 1,
+        'meta_dense_width': 64,
+        'meta_l2_reg': 1e-5,
+        'meta_dropout': 0.2,
+        'comb_dense_layers': 3,
+        'comb_dense_width': 64,
+        'comb_l2_reg': 1e-6,
+        'comb_dropout': 0.2,
+        'lstm_units': 8,
+        'lstm_l2_reg': 1e-7
+    }
+
+    input_shape = loader.get_input_shape()
+    lstm_nn = MultiLSTMWithMetadata(input_shape, **model_args)
+
+    lstm_nn.fit(data_train_os, target_train_os, data_val, target_val)
+
+    train_results[:, 3] = lstm_nn.predict(data_train).squeeze()
+    val_results[:, 3] = lstm_nn.predict(data_val).squeeze()
+
+    lr = LogisticRegression(class_weight='balanced')
+    lr.fit(train_results, target_train.values)
+
+    # TODO: collect SK_ID for out of sample data
+    y = lr.predict(val_results)
+
+    results = pd.DataFrame(np.concatenate([target_train, y.values.reshape(-1, 1)], axis=1))
+    results.to_csv('data/results.csv')
+
+
+def ensemble_fit_val():
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+    loader_args = {
+        'cc_tmax': 60,
+        'bureau_tmax': 60,
+        'pos_tmax': 60
+    }
+
+    loader = HCDRDataLoader(**loader_args)
+    app_ix = loader.get_index()
+
+    kf = KFold(n_splits=4, shuffle=True)
     for fold_indexes in kf.split(app_ix):
-        # load training and validation summary data
-        data_train, target_train, data_val, target_val = loader.load_train_val(fold_indexes[0], fold_indexes[1])
+        pass
 
-        # oversample troubled loans to make up for imbalance
-        ros = RandomOverSampler()
-        data_train_os_index, target_train_os = ros.fit_sample(np.arange(data_train.shape[0]).reshape(-1, 1),
-                                                              target_train)
-        data_train_os = data_train[data_train_os_index.squeeze()]
+    # load training and test data
+    data_train_ts, target_train_ts, data_val_ts, target_val_ts = loader.load_train_val(fold_indexes[0], fold_indexes[1])
+    input_shape = loader.get_input_shape()
 
-        # train on linear neural network
-        linear_nn = LinearNN(data_train_os.shape[1])
-        linear_nn.fit(data_train_os, target_train_os, data_val, target_val)
-        # TODO: use predict on out of sample data and store results for each model
+    # oversample troubled loans to make up for imbalance
+    ros = RandomOverSampler()
+    os_index, target_train_os = ros.fit_sample(np.arange(data_train_ts[0].shape[0]).reshape(-1, 1), target_train_ts)
+    data_train_ts_os = [data_train_part[os_index.squeeze()] for data_train_part in data_train_ts]
+    target_train_ts_os = target_train_ts.values[os_index.squeeze()]
 
-        # gradient boosting classifier
-        gbc = GBC()
-        gbc.fit(data_train_os, target_train_os)
+    # data_train_os = data_train[os_index.squeeze()]
+    # use predict on out of sample data and store results for each model
+    num_models = 4
+    train_samples = target_train_ts.shape[0]
+    val_samples = target_val_ts.shape[0]
+    train_results = np.empty((train_samples, num_models))
+    val_results = np.empty((val_samples, num_models))
 
-        # adaboost classifier
-        abc = ABC()
-        abc.fit(data_train_os, target_train_os)
+    # train on linear neural network
+    linear_nn = LinearNN(data_train_ts_os[0].shape[1], epochs=25)
+    linear_nn.fit(data_train_ts_os[0], target_train_ts_os, data_val_ts[0], target_val_ts)
 
-        # load time series data
-        sequence_length = 25
-        cc_data_train = loader.read_credit_card_balance(app_ix.values[fold_indexes[0]], t_max=sequence_length)
-        cc_data_val = loader.read_credit_card_balance(app_ix.values[fold_indexes[1]], t_max=sequence_length)
-        cc_data_train_os = cc_data_train[data_train_os_index.squeeze()]
+    train_results[:, 0] = linear_nn.predict(data_train_ts[0]).squeeze()
+    val_results[:, 0] = linear_nn.predict(data_val_ts[0]).squeeze()
 
-        # determine input shape
-        sequence_features = np.int(cc_data_train.shape[1] / sequence_length)
-        meta_features = np.int(data_train.shape[1])
+    # gradient boosting classifier
+    gbc = GBC()
+    gbc.fit(data_train_ts_os[0], target_train_os)
 
-        # combined credit card balance lstm and dense metadata neural network
-        lstm_nn = MultiLSTMWithMetadata(sequence_length, sequence_features, meta_features)
-        lstm_nn.fit(cc_data_train_os, data_train_os, target_train_os,
-                    cc_data_val, data_val, target_val)
+    train_results[:, 1] = gbc.predict(data_train_ts[0]).squeeze()
+    val_results[:, 1] = gbc.predict(data_val_ts[0]).squeeze()
 
+    # adaboost classifier
+    abc = ABC()
+    abc.fit(data_train_ts_os[0], target_train_os)
 
-def grid_search(model_class, data_loader, hp_file,
-                loader_args=None, model_args=None,
-                folds=4, random_oversample=False):
-    """
-    Perform grid search over hyperparameters over given models.
-    :param model_class:
-    :param data_loader:
-    :param loader_args:
-    :param model_args:
-    :param hp_file:
-    :param folds:
-    :param random_oversample:
-    :return:
-    """
-    loader = data_loader(**loader_args)
+    train_results[:, 2] = abc.predict(data_train_ts[0]).squeeze()
+    val_results[:, 2] = abc.predict(data_val_ts[0]).squeeze()
 
-    # load index values from main table
-    data_ix = loader.get_index()
-    
-    # load hyperparameters from file
-    with open(hp_file, 'r') as f:
-        hyperparameters = ast.literal_eval(f.read())
+    model_args = {
+        'epochs': 5,
+        'batch_size': 256,
+        'lstm_gpu': False,
+        'sequence_dense_layers': 0,
+        'sequence_dense_width': 8,
+        'sequence_l2_reg': 0,
+        'meta_dense_layers': 1,
+        'meta_dense_width': 64,
+        'meta_l2_reg': 1e-5,
+        'meta_dropout': 0.2,
+        'comb_dense_layers': 3,
+        'comb_dense_width': 64,
+        'comb_l2_reg': 1e-6,
+        'comb_dropout': 0.2,
+        'lstm_units': 8,
+        'lstm_l2_reg': 1e-7
+    }
 
-    # create a list of dicts with hyperparameters for each experiment to run
-    keys, values = zip(*hyperparameters.items())
-    experiments = [dict(zip(keys, v)) for v in itertools.product(*values)]
-    exp_df = pd.DataFrame(experiments)
+    lstm_nn = MultiLSTMWithMetadata(input_shape, **model_args)
 
-    # prepare for storing confusion matrix and accuracy results to file
-    cm = np.zeros((len(experiments), 2, 2), dtype=int)
-    cm_df_cols = ['CM True Neg', 'CM False Pos', 'CM False Neg', 'CM True Pos']
-    results_path = 'results/gridsearch_results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
+    lstm_nn.fit(data_train_ts_os, target_train_os, data_val_ts, target_val_ts)
 
-    # fit model using k-fold verification
-    kf = KFold(n_splits=folds, shuffle=True)
+    train_results[:, 3] = lstm_nn.predict(data_train_ts).squeeze()
+    val_results[:, 3] = lstm_nn.predict(data_val_ts).squeeze()
 
-    for j, fold_indexes in enumerate(kf.split(data_ix)):
-        # load train and validation data
-        data_train, target_train, data_val, target_val = loader.load_train_val(fold_indexes[0], fold_indexes[1])
+    lr = LogisticRegression(class_weight='balanced')
+    lr.fit(train_results, target_train_ts.values)
 
-        # determine shape of input arrays
-        input_shape = loader.get_input_shape()
+    # TODO: collect SK_ID for out of sample data
+    y = lr.predict(val_results)
 
-        # oversample to correct for class imbalance
-        if random_oversample:
-            ros = RandomOverSampler()
-            os_index, target_train_temp = ros.fit_sample(np.arange(data_train[0].shape[0]).reshape(-1, 1), target_train)
-            data_train = [data_train_part[os_index.squeeze()] for data_train_part in data_train]
-            target_train = target_train_temp
-
-        logging.debug('Fold {} of {}'.format(j + 1, folds))
-        
-        for i, experiment in enumerate(experiments):
-            logging.debug(experiment)
-            model = model_class(input_shape, **model_args, **experiment)
-            # TODO: track oos accuracy per epoch
-            history = model.fit(data_train, target_train, data_val, target_val)
-            predict_val = model.predict(data_val)
-
-            cm[i, :, :] = cm[i, :, :] + confusion_matrix(target_val, predict_val.round())
-            cm_df = pd.DataFrame(cm.reshape((cm.shape[0], 4)), columns=cm_df_cols)
-            results_df = exp_df.join(cm_df)
-            # TODO: also store run time
-            results_df.to_csv(results_path)
+    results = pd.DataFrame(np.concatenate([val_results, y, target_val_ts.values.reshape(-1, 1)], axis=1))
+    results.to_csv('data/results.csv')
 
 
 def predict_test():
     pass
 
 
-def new_main():
+def hparam_grid_search():
     loader_args = {
         'cc_tmax': 60,
         'bureau_tmax': 60,
@@ -151,4 +209,4 @@ def new_main():
 
 
 if __name__ == "__main__":
-    new_main()
+    ensemble_fit_val()

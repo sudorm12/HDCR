@@ -71,8 +71,7 @@ class HCDRDataLoader(DataLoader):
 
         return data_train, target_train
 
-    def load_test_data(self):
-        # TODO: add load_time_series
+    def load_test_data(self, load_time_series=True):
         # load each of the available data tables
         applications = self.read_applications(split_index=None, fit_transform=False)
         joined_train = applications.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
@@ -82,19 +81,24 @@ class HCDRDataLoader(DataLoader):
 
         # scale to zero mean and unit variance
         meta_data_train = self._num_scaler.fit_transform(meta_data_train.loc[:, meta_data_train.dtypes == np.number])
+        meta_data_shape = tuple([meta_data_train.shape[1]])
 
-        cc_data_train = self.read_credit_card_balance(meta_data_train.index.values)
-        bureau_data_train = self.read_bureau_balance(meta_data_train.index.values)
-        pos_cash_data_train = self.read_pos_cash(meta_data_train.index.values)
+        if load_time_series:
+            cc_data_train = self.read_credit_card_balance(meta_data_train.index.values)
+            bureau_data_train = self.read_bureau_balance(meta_data_train.index.values)
+            pos_cash_data_train = self.read_pos_cash(meta_data_train.index.values)
 
-        data_train = [meta_data_train, cc_data_train, bureau_data_train, pos_cash_data_train]
+            ts_data_shape = [tuple([self._cc_tmax, int(cc_data_train.shape[1] / self._cc_tmax)]),
+                             tuple([self._bureau_tmax, int(bureau_data_train.shape[1] / self._bureau_tmax)]),
+                             tuple([self._pos_tmax, int(pos_cash_data_train.shape[1] / self._pos_tmax)])]
+
+            data_train = [meta_data_train, cc_data_train, bureau_data_train, pos_cash_data_train]
+            self._input_shape = [meta_data_shape, *ts_data_shape]
+        else:
+            data_train = meta_data_train
+            self._input_shape = meta_data_shape
 
         # determine input shapes
-        meta_data_shape = tuple([data_train[0].shape[1]])
-        ts_data_shape = [tuple([self._cc_tmax, int(cc_data_train.shape[1] / self._cc_tmax)]),
-                         tuple([self._bureau_tmax, int(bureau_data_train.shape[1] / self._bureau_tmax)]),
-                         tuple([self._pos_tmax, int(pos_cash_data_train.shape[1] / self._pos_tmax)])]
-        self._input_shape = [meta_data_shape, *ts_data_shape]
         logging.debug(self._input_shape)
 
         return data_train
@@ -138,7 +142,6 @@ class HCDRDataLoader(DataLoader):
         apps_clean[stat_cols] = self._curr_home_imputer.predict(X)
         full_home_stats = apps_clean[stat_cols]
 
-        # TODO: may want to set a selectable threshold for PCA columns based on explained variance
         pca_components = 2
         pca_cols = ['CURR_HOME_' + str(pca_col) for pca_col in range(pca_components)]
 
