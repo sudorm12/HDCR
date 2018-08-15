@@ -29,12 +29,16 @@ class HCDRDataLoader(DataLoader):
         self._mean_imp_means = None
 
         self._applications = pd.read_csv('{}/application_train.csv'.format(data_dir), index_col="SK_ID_CURR")
+        self._applications_test = pd.read_csv('{}/application_test.csv'.format(data_dir), index_col="SK_ID_CURR")
         self._bureau_summary = self.read_bureau()
         self._previous_summary = self.read_previous_application()
         self._input_shape = None
 
     def get_index(self):
         return self._applications.index
+
+    def get_test_index(self):
+        return self._applications_test.index
 
     def load_train_data(self, split_index=None, fit_transform=True, load_time_series=True):
         # load each of the available data tables
@@ -73,10 +77,9 @@ class HCDRDataLoader(DataLoader):
 
     def load_test_data(self, load_time_series=True):
         # load each of the available data tables
-        applications = self.read_applications(split_index=None, fit_transform=False)
+        applications = self.read_applications(split_index=None, fit_transform=False, test_data=True)
         joined_train = applications.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
                                                                                        rsuffix='_PREVIOUS')
-
         meta_data_train = joined_train.combine_first(joined_train.select_dtypes(include=[np.number]).fillna(0))
 
         # scale to zero mean and unit variance
@@ -84,9 +87,9 @@ class HCDRDataLoader(DataLoader):
         meta_data_shape = tuple([meta_data_train.shape[1]])
 
         if load_time_series:
-            cc_data_train = self.read_credit_card_balance(meta_data_train.index.values)
-            bureau_data_train = self.read_bureau_balance(meta_data_train.index.values)
-            pos_cash_data_train = self.read_pos_cash(meta_data_train.index.values)
+            cc_data_train = self.read_credit_card_balance(self.get_test_index().values)
+            bureau_data_train = self.read_bureau_balance(self.get_test_index().values)
+            pos_cash_data_train = self.read_pos_cash(self.get_test_index().values)
 
             ts_data_shape = [tuple([self._cc_tmax, int(cc_data_train.shape[1] / self._cc_tmax)]),
                              tuple([self._bureau_tmax, int(bureau_data_train.shape[1] / self._bureau_tmax)]),
@@ -109,8 +112,7 @@ class HCDRDataLoader(DataLoader):
     def read_applications(self, split_index=None, fit_transform=True, test_data=False):
         logging.debug('Preparing applications data...')
         if test_data:
-            apps_clean = pd.read_csv('{}/application_test.csv'.format(self._data_dir),
-                                     index_col="SK_ID_CURR")
+            apps_clean = self._applications_test.copy()
         else:
             apps_clean = self._applications.copy()
 

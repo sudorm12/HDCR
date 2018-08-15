@@ -26,12 +26,11 @@ class LinearNN:
                             optimizer='Adam',
                             metrics=['accuracy'])
 
-    # TODO: make validation data optional
-    def fit(self, data_train, target_train, data_val, target_val):
+    def fit(self, data_train, target_train, validation_data=None):
         self._model.fit(data_train, target_train,
                         epochs=self._epochs,
                         batch_size=self._batch_size,
-                        validation_data=(data_val, target_val))
+                        validation_data=validation_data)
 
     def predict(self, data):
         return self._model.predict(data)
@@ -132,12 +131,13 @@ class MultiLSTMWithMetadata:
                             loss_weights=[1.] + [0.2] * self._num_seq_inputs,
                             metrics=['accuracy'])
 
-    # TODO: make validation data optional
-    def fit(self, data_train, target_train, data_val, target_val):
+    def fit(self, data_train, target_train, validation_data=None, verbose=2):
         num_outputs = self._num_seq_inputs + 1
+        if validation_data is not None:
+            validation_data[1] = [validation_data[1]] * num_outputs
         history = self._model.fit(data_train, [target_train] * num_outputs,
-                                  validation_data=(data_val, [target_val] * num_outputs),
-                                  epochs=self._num_epochs, batch_size=self._batch_size, verbose=2)
+                                  validation_data=validation_data,
+                                  epochs=self._num_epochs, batch_size=self._batch_size, verbose=verbose)
         return history
 
     def predict(self, data):

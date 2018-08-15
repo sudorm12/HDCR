@@ -65,7 +65,7 @@ def grid_search(model_class, data_loader, hp_file,
             logging.debug(experiment)
             model = model_class(input_shape, **model_args, **experiment)
             # TODO: track oos accuracy per epoch
-            history = model.fit(data_train, target_train, data_val, target_val)
+            history = model.fit(data_train, target_train, validation_data=(data_val, target_val))
             predict_val = model.predict(data_val)
 
             cm[i, :, :] = cm[i, :, :] + confusion_matrix(target_val, predict_val.round())
