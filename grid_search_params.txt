@@ -1,15 +1,16 @@
 {
+'epochs': [25, 50, 100],
 'sequence_dense_layers': [0],
 'sequence_dense_width': [8],
 'sequence_l2_reg': [0],
 'meta_dense_layers': [1],
 'meta_dense_width': [64],
-'meta_l2_reg': [1e-5],
-'meta_dropout': [0, 0.2],
+'meta_l2_reg': [1e-5, 1e-6],
+'meta_dropout': [0.2],
 'comb_dense_layers': [3],
 'comb_dense_width': [64],
-'comb_l2_reg': [1e-6],
-'comb_dropout': [0, 0.2],
+'comb_l2_reg': [1e-6, 1e-7],
+'comb_dropout': [0.2],
 'lstm_units': [8, 16],
-'lstm_l2_reg': [1e-7]
+'lstm_l2_reg': [1e-6, 1e-7]
 }
