@@ -84,7 +84,7 @@ class HCDRDataLoader(DataLoader):
         meta_data_train = joined_train.combine_first(joined_train.select_dtypes(include=[np.number]).fillna(0))
 
         # scale to zero mean and unit variance
-        meta_data_train = self._num_scaler.fit_transform(meta_data_train.loc[:, meta_data_train.dtypes == np.number])
+        meta_data_train = self._num_scaler.transform(meta_data_train.loc[:, meta_data_train.dtypes == np.number])
         meta_data_shape = tuple([meta_data_train.shape[1]])
 
         if load_time_series:

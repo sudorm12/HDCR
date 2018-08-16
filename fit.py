@@ -62,7 +62,7 @@ def ensemble_fit_predict():
     model_args = {
         'epochs': 25,
         'batch_size': 512,
-        'lstm_gpu': False,
+        'lstm_gpu': True,
         'sequence_dense_layers': 0,
         'sequence_dense_width': 8,
         'sequence_l2_reg': 0,
