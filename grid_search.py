@@ -40,7 +40,7 @@ def grid_search(model_class, data_loader, hp_file,
     # prepare for storing confusion matrix and accuracy results to file
     cm = np.zeros((len(experiments), 2, 2), dtype=int)
     cm_df_cols = ['CM True Neg', 'CM False Pos', 'CM False Neg', 'CM True Pos']
-    results_path = 'results/gridsearch_results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
+    results_path = 'data/results/gridsearch_results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
 
     # fit model using k-fold verification
     kf = KFold(n_splits=folds, shuffle=True)

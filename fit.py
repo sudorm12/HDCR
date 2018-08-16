@@ -60,9 +60,9 @@ def ensemble_fit_predict():
     val_results[:, 2] = abc.predict(data_val[0]).squeeze()
 
     model_args = {
-        'epochs': 25,
+        'epochs': 50,
         'batch_size': 512,
-        'lstm_gpu': True,
+        'lstm_gpu': False,
         'sequence_dense_layers': 0,
         'sequence_dense_width': 8,
         'sequence_l2_reg': 0,
@@ -86,7 +86,7 @@ def ensemble_fit_predict():
     train_results[:, 3] = lstm_nn.predict(data_train).squeeze()
     val_results[:, 3] = lstm_nn.predict(data_val).squeeze()
 
-    lr = LogisticRegression(class_weight='balanced')
+    lr = LogisticRegression(class_weight='balanced', C=0.1)
     lr.fit(train_results, target_train.values)
 
     y = lr.predict(val_results)
@@ -94,6 +94,9 @@ def ensemble_fit_predict():
     results_path = 'data/results/results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
     results = pd.DataFrame({'SK_ID_CURR': loader.get_test_index().values, 'TARGET': y}).set_index('SK_ID_CURR')
     results.to_csv(results_path)
+
+    raw_results = pd.DataFrame(np.concatenate([val_results, y.reshape(-1, 1)], axis=1))
+    raw_results.to_csv('data/results/raw_results{:%Y%m%d_%H%M%S}.csv'.format(datetime.now()))
 
 
 def ensemble_fit_val():

@@ -132,34 +132,6 @@ class HCDRDataLoader(DataLoader):
         # identify encoded columns, fill na with unspecified and change to categorical
         apps_clean = self._cat_data_dummies(apps_clean)
 
-        # # use smart imputation and pca on current home information
-        # stat_suffixes = ['_AVG', '_MEDI', '_MODE']
-        # stat_cols = [col for col in apps_clean.columns[apps_clean.columns.str.contains('|'.join(stat_suffixes))]]
-        #
-        # X = apps_clean[stat_cols].values
-        # logging.debug('Performing soft impute on current home info...')
-        # if True:  # fit_transform:
-        #     # TODO: only fit for fit_transform
-        #     self._curr_home_imputer.fit(X)
-        #
-        # apps_clean[stat_cols] = self._curr_home_imputer.predict(X)
-        # full_home_stats = apps_clean[stat_cols]
-        #
-        # pca_components = 2
-        # pca_cols = ['CURR_HOME_' + str(pca_col) for pca_col in range(pca_components)]
-        #
-        # logging.debug('Running PCA on current home info...')
-        # if fit_transform:
-        #     self._st_pca = PCA(n_components=pca_components)
-        #     self._st_pca.fit(full_home_stats)
-        #
-        # home_stats_pca = pd.DataFrame(self._st_pca.transform(full_home_stats),
-        #                               index=full_home_stats.index,
-        #                               columns=pca_cols)
-        #
-        # apps_clean = apps_clean.join(home_stats_pca)
-        # apps_clean = apps_clean.drop(stat_cols, axis=1)
-
         # impute all credit bureau requests with zero, except past year with one
         app_credit_cols = apps_clean.columns[apps_clean.columns.str.contains('AMT_REQ_CREDIT_BUREAU')]
         apps_clean['AMT_REQ_CREDIT_BUREAU_YEAR'] = apps_clean['AMT_REQ_CREDIT_BUREAU_YEAR'].fillna(1)
