@@ -38,6 +38,7 @@ def ensemble_fit_predict():
     val_results = np.empty((test_samples, num_models))
 
     # train on linear neural network
+    # TODO: add dropout and regularization
     linear_nn = LinearNN(data_train_os[0].shape[1], epochs=25)
     linear_nn.fit(data_train_os[0], target_train_os)
 

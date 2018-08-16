@@ -1,4 +1,3 @@
-import logging
 from keras.models import Sequential, Model
 from keras.layers import CuDNNLSTM, LSTM, Dense, Dropout, Input, Reshape, concatenate
 from keras.regularizers import l2
@@ -135,7 +134,7 @@ class MultiLSTMWithMetadata:
     def fit(self, data_train, target_train, validation_data=None, verbose=2):
         num_outputs = self._num_seq_inputs + 1
         if validation_data is not None:
-            validation_data[1] = [validation_data[1]] * num_outputs
+            validation_data = (validation_data[0], [validation_data[1]] * num_outputs)
         history = self._model.fit(data_train, [target_train] * num_outputs,
                                   validation_data=validation_data,
                                   epochs=self._num_epochs, batch_size=self._batch_size, verbose=verbose)

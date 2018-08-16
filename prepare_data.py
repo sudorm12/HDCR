@@ -30,6 +30,7 @@ class HCDRDataLoader(DataLoader):
 
         self._applications = pd.read_csv('{}/application_train.csv'.format(data_dir), index_col="SK_ID_CURR")
         self._applications_test = pd.read_csv('{}/application_test.csv'.format(data_dir), index_col="SK_ID_CURR")
+        self.pca_all_home_stats()
         self._bureau_summary = self.read_bureau()
         self._previous_summary = self.read_previous_application()
         self._input_shape = None
@@ -131,33 +132,33 @@ class HCDRDataLoader(DataLoader):
         # identify encoded columns, fill na with unspecified and change to categorical
         apps_clean = self._cat_data_dummies(apps_clean)
 
-        # use smart imputation and pca on current home information
-        stat_suffixes = ['_AVG', '_MEDI', '_MODE']
-        stat_cols = [col for col in apps_clean.columns[apps_clean.columns.str.contains('|'.join(stat_suffixes))]]
-
-        X = apps_clean[stat_cols].values
-        logging.debug('Performing soft impute on current home info...')
-        if True:  # fit_transform:
-            # TODO: only fit for fit_transform
-            self._curr_home_imputer.fit(X)
-
-        apps_clean[stat_cols] = self._curr_home_imputer.predict(X)
-        full_home_stats = apps_clean[stat_cols]
-
-        pca_components = 2
-        pca_cols = ['CURR_HOME_' + str(pca_col) for pca_col in range(pca_components)]
-
-        logging.debug('Running PCA on current home info...')
-        if fit_transform:
-            self._st_pca = PCA(n_components=pca_components)
-            self._st_pca.fit(full_home_stats)
-
-        home_stats_pca = pd.DataFrame(self._st_pca.transform(full_home_stats),
-                                      index=full_home_stats.index,
-                                      columns=pca_cols)
-
-        apps_clean = apps_clean.join(home_stats_pca)
-        apps_clean = apps_clean.drop(stat_cols, axis=1)
+        # # use smart imputation and pca on current home information
+        # stat_suffixes = ['_AVG', '_MEDI', '_MODE']
+        # stat_cols = [col for col in apps_clean.columns[apps_clean.columns.str.contains('|'.join(stat_suffixes))]]
+        #
+        # X = apps_clean[stat_cols].values
+        # logging.debug('Performing soft impute on current home info...')
+        # if True:  # fit_transform:
+        #     # TODO: only fit for fit_transform
+        #     self._curr_home_imputer.fit(X)
+        #
+        # apps_clean[stat_cols] = self._curr_home_imputer.predict(X)
+        # full_home_stats = apps_clean[stat_cols]
+        #
+        # pca_components = 2
+        # pca_cols = ['CURR_HOME_' + str(pca_col) for pca_col in range(pca_components)]
+        #
+        # logging.debug('Running PCA on current home info...')
+        # if fit_transform:
+        #     self._st_pca = PCA(n_components=pca_components)
+        #     self._st_pca.fit(full_home_stats)
+        #
+        # home_stats_pca = pd.DataFrame(self._st_pca.transform(full_home_stats),
+        #                               index=full_home_stats.index,
+        #                               columns=pca_cols)
+        #
+        # apps_clean = apps_clean.join(home_stats_pca)
+        # apps_clean = apps_clean.drop(stat_cols, axis=1)
 
         # impute all credit bureau requests with zero, except past year with one
         app_credit_cols = apps_clean.columns[apps_clean.columns.str.contains('AMT_REQ_CREDIT_BUREAU')]
@@ -201,6 +202,47 @@ class HCDRDataLoader(DataLoader):
         apps_clean[self._mean_imp_cols] = apps_clean[self._mean_imp_cols].fillna(self._mean_imp_means)
 
         return apps_clean
+
+    def pca_all_home_stats(self):
+        apps_columns = self._applications.columns
+
+        stat_suffixes = ['_AVG', '_MEDI', '_MODE']
+        stat_cols = [col for col in apps_columns[apps_columns.str.contains('|'.join(stat_suffixes))]]
+
+        stat_train = self._applications[stat_cols]
+        stat_test = self._applications_test[stat_cols]
+        stat_full = pd.concat([stat_train, stat_test])
+
+        stat_full = self._cat_data_dummies(stat_full)
+        stat_index = stat_full.index.values
+
+        logging.debug('Performing soft impute on current home info...')
+        self._curr_home_imputer.fit(stat_full.values)
+        stat_full = self._curr_home_imputer.predict(stat_full.values)
+
+        pca_components = 2
+        pca_cols = ['CURR_HOME_' + str(pca_col) for pca_col in range(pca_components)]
+
+        logging.debug('Running PCA on current home info...')
+        self._st_pca = PCA(n_components=pca_components)
+        self._st_pca.fit(stat_full)
+
+        home_stats_pca = pd.DataFrame(self._st_pca.transform(stat_full),
+                                      index=stat_index,
+                                      columns=pca_cols)
+
+        stat_pca_train = pd.DataFrame(home_stats_pca.loc[self.get_index().values],
+                                      index=self.get_index().values,
+                                      columns=pca_cols)
+        stat_pca_test = pd.DataFrame(home_stats_pca.loc[self.get_test_index().values],
+                                     index=self.get_test_index().values,
+                                     columns=pca_cols)
+
+        self._applications = self._applications.join(stat_pca_train)
+        self._applications = self._applications.drop(stat_cols, axis=1)
+
+        self._applications_test = self._applications_test.join(stat_pca_test)
+        self._applications_test = self._applications_test.drop(stat_cols, axis=1)
 
     def read_bureau(self):
         # read in credit bureau data
