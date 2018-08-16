@@ -53,11 +53,12 @@ class DataLoader:
 
         return df_clean
 
-    def _cat_data_dummies(self, df):
+    @staticmethod
+    def _cat_data_dummies(df):
         df_clean = df.copy()
 
         # convert categorical columns to Categorical dtype
-        df_clean = self._cat_data(df_clean)
+        df_clean = DataLoader._cat_data(df_clean)
 
         # convert Categorical columns to dummy columns
         df_clean = pd.get_dummies(df_clean)
