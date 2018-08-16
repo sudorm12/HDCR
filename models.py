@@ -26,11 +26,12 @@ class LinearNN:
                             optimizer='Adam',
                             metrics=['accuracy'])
 
-    def fit(self, data_train, target_train, validation_data=None):
+    def fit(self, data_train, target_train, validation_data=None, verbose=2):
         self._model.fit(data_train, target_train,
                         epochs=self._epochs,
                         batch_size=self._batch_size,
-                        validation_data=validation_data)
+                        validation_data=validation_data,
+                        verbose=verbose)
 
     def predict(self, data):
         return self._model.predict(data)
