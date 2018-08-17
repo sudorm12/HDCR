@@ -54,7 +54,7 @@ class ABC:
         self._model = AdaBoostClassifier(n_estimators=n_estimators,
                                          learning_rate=learning_rate)
 
-    def fit(self, data_train, target_train):
+    def fit(self, data_train, target_train, validation_data=None):
         self._model.fit(data_train, target_train)
 
     def predict(self, data):
