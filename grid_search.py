@@ -55,9 +55,11 @@ def grid_search(model_class, data_loader, hp_file,
         # oversample to correct for class imbalance
         if random_oversample:
             ros = RandomOverSampler()
-            os_index, target_train_temp = ros.fit_sample(np.arange(data_train[0].shape[0]).reshape(-1, 1), target_train)
-            data_train = [data_train_part[os_index.squeeze()] for data_train_part in data_train]
-            target_train = target_train_temp
+            os_index, target_train = ros.fit_sample(np.arange(len(fold_indexes[0])).reshape(-1, 1), target_train)
+            if isinstance(data_train, list):
+                data_train = [data_train_part[os_index.squeeze()] for data_train_part in data_train]
+            else:
+                data_train = data_train[os_index.squeeze()]
 
         logging.debug('Fold {} of {}'.format(j + 1, folds))
 

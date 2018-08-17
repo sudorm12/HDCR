@@ -10,7 +10,7 @@ from loader import DataLoader
 
 
 class HCDRDataLoader(DataLoader):
-    def __init__(self, cc_tmax=25, bureau_tmax=25, pos_tmax=25, data_dir='data'):
+    def __init__(self, cc_tmax=25, bureau_tmax=25, pos_tmax=25, data_dir='data', load_time_series=True):
         super().__init__()
         logging.debug('Initializing data loader')
 
@@ -34,6 +34,7 @@ class HCDRDataLoader(DataLoader):
         self._bureau_summary = self.read_bureau()
         self._previous_summary = self.read_previous_application()
         self._input_shape = None
+        self._load_time_series = load_time_series
 
     def get_index(self):
         return self._applications.index
@@ -41,7 +42,10 @@ class HCDRDataLoader(DataLoader):
     def get_test_index(self):
         return self._applications_test.index
 
-    def load_train_data(self, split_index=None, fit_transform=True, load_time_series=True):
+    def load_train_data(self, split_index=None, fit_transform=True, load_time_series=None):
+        if load_time_series is None:
+            load_time_series = self._load_time_series
+
         # load each of the available data tables
         applications = self.read_applications(split_index, fit_transform=fit_transform)
         joined_train = applications.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
@@ -311,6 +315,26 @@ class HCDRDataLoader(DataLoader):
 
         logging.debug('Done')
         return bureau_sparse
+
+    def bureau_balance_summary(self, sk_ids=None):
+        # read bureau balance csv and full list of id values
+        bureau_balance = pd.read_csv('{}/bureau_balance.csv'.format(self._data_dir))
+        bureau = pd.read_csv('data/bureau.csv')
+        id_xref = bureau[['SK_ID_CURR', 'SK_ID_BUREAU']]
+        app_ix = self.get_index()
+
+        # merge bureau ids with application ids
+        bureau_balance = bureau_balance.merge(id_xref).drop(['SK_ID_BUREAU'], axis=1)
+
+        # convert categorical columns to dummy values
+        bureau_balance = self._cat_data_dummies(bureau_balance)
+
+        # skim unused ids from input data
+        if sk_ids is None:
+            sk_ids = app_ix.values
+        bureau_balance = bureau_balance[bureau_balance['SK_ID_CURR'].isin(sk_ids)]
+
+
 
     def read_pos_cash(self, sk_ids=None):
         # read pos cash csv and full list of id values

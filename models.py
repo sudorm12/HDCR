@@ -37,10 +37,12 @@ class LinearNN:
 
 
 class GBC:
-    def __init__(self, n_estimators=10):
-        self._model = GradientBoostingClassifier(n_estimators=n_estimators)
+    def __init__(self, input_shape=None, n_estimators=10, max_depth=3, verbose=0):
+        self._model = GradientBoostingClassifier(n_estimators=n_estimators,
+                                                 max_depth=max_depth,
+                                                 verbose=verbose)
 
-    def fit(self, data_train, target_train):
+    def fit(self, data_train, target_train, validation_data=None):
         self._model.fit(data_train, target_train)
 
     def predict(self, data):
@@ -48,7 +50,7 @@ class GBC:
 
 
 class ABC:
-    def __init__(self, n_estimators=10):
+    def __init__(self, input_shape=None, n_estimators=10):
         self._model = AdaBoostClassifier(n_estimators=n_estimators)
 
     def fit(self, data_train, target_train):
