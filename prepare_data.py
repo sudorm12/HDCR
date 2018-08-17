@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import logging
+import itertools
 from sklearn.preprocessing import StandardScaler
 from soft_impute import SoftImpute
 from sklearn.decomposition import PCA
@@ -33,6 +34,10 @@ class HCDRDataLoader(DataLoader):
         self.pca_all_home_stats()
         self._bureau_summary = self.read_bureau()
         self._previous_summary = self.read_previous_application()
+        self._bureau_balance_summary = self.bureau_balance_summary()
+        self._cc_balance_summary = self.cc_balance_summary()
+        self._pos_cash_summary = self.pos_cash_summary()
+
         self._input_shape = None
         self._load_time_series = load_time_series
 
@@ -48,8 +53,12 @@ class HCDRDataLoader(DataLoader):
 
         # load each of the available data tables
         applications = self.read_applications(split_index, fit_transform=fit_transform)
-        joined_train = applications.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
-                                                                                       rsuffix='_PREVIOUS')
+        joined_train = (applications
+                        .join(self._bureau_summary, rsuffix='_BUREAU')
+                        .join(self._previous_summary, rsuffix='_PREVIOUS')
+                        .join(self._bureau_balance_summary, rsuffix='_BUREAU_BALANCE')
+                        .join(self._cc_balance_summary, rsuffix='_CC_BALANCE')
+                        .join(self._pos_cash_summary, rsuffix='_POS_CASH'))
 
         full_data_train = joined_train.combine_first(joined_train.select_dtypes(include=[np.number]).fillna(0))
 
@@ -83,8 +92,9 @@ class HCDRDataLoader(DataLoader):
     def load_test_data(self, load_time_series=True):
         # load each of the available data tables
         applications = self.read_applications(split_index=None, fit_transform=False, test_data=True)
-        joined_train = applications.join(self._bureau_summary, rsuffix='_BUREAU').join(self._previous_summary,
-                                                                                       rsuffix='_PREVIOUS')
+        joined_train = (applications
+                        .join(self._bureau_summary, rsuffix='_BUREAU')
+                        .join(self._previous_summary, rsuffix='_PREVIOUS'))
         meta_data_train = joined_train.combine_first(joined_train.select_dtypes(include=[np.number]).fillna(0))
 
         # scale to zero mean and unit variance
@@ -279,6 +289,22 @@ class HCDRDataLoader(DataLoader):
         logging.debug('Done')
         return cc_ts_sparse
 
+    def cc_balance_summary(self):
+        # read credit card balance csv
+        cc_balance = pd.read_csv('data/credit_card_balance.csv')
+
+        # convert categorical columns to dummy values
+        cc_balance = self._cat_data_dummies(cc_balance)
+
+        # group by id and aggregate statistics for each column
+        cc_balance_sum = (cc_balance
+                          .drop(['MONTHS_BALANCE', 'SK_ID_PREV'], axis=1)
+                          .groupby('SK_ID_CURR')
+                          .agg(['sum', 'min', 'max', 'mean']))
+        cc_balance_sum.columns = ['_'.join(a) for a in itertools.product(*cc_balance_sum.columns.levels)]
+
+        return cc_balance_sum
+
     def read_bureau_balance(self, sk_ids=None):
         # read bureau balance csv and full list of id values
         bureau_balance = pd.read_csv('{}/bureau_balance.csv'.format(self._data_dir))
@@ -316,9 +342,10 @@ class HCDRDataLoader(DataLoader):
         logging.debug('Done')
         return bureau_sparse
 
-    def bureau_balance_summary(self, sk_ids=None):
+    def bureau_balance_summary(self):
         # read bureau balance csv and full list of id values
         bureau_balance = pd.read_csv('{}/bureau_balance.csv'.format(self._data_dir))
+        # TODO: make id xref a class variable
         bureau = pd.read_csv('data/bureau.csv')
         id_xref = bureau[['SK_ID_CURR', 'SK_ID_BUREAU']]
         app_ix = self.get_index()
@@ -329,12 +356,11 @@ class HCDRDataLoader(DataLoader):
         # convert categorical columns to dummy values
         bureau_balance = self._cat_data_dummies(bureau_balance)
 
-        # skim unused ids from input data
-        if sk_ids is None:
-            sk_ids = app_ix.values
-        bureau_balance = bureau_balance[bureau_balance['SK_ID_CURR'].isin(sk_ids)]
+        # group by id and sum for each column
+        bureau_bal_sum = bureau_balance.drop('MONTHS_BALANCE', axis=1).groupby('SK_ID_CURR').agg(['sum'])
+        bureau_bal_sum.columns = ['_'.join(col_name) for col_name in itertools.product(*bureau_bal_sum.columns.levels)]
 
-
+        return bureau_bal_sum
 
     def read_pos_cash(self, sk_ids=None):
         # read pos cash csv and full list of id values
@@ -365,3 +391,23 @@ class HCDRDataLoader(DataLoader):
 
         logging.debug('Done')
         return pos_cash_summary.fillna(0).values
+
+    def pos_cash_summary(self):
+        # read pos cash csv and full list of id values
+        pos_cash = pd.read_csv('data/POS_CASH_balance.csv')
+        bureau = pd.read_csv('data/bureau.csv')
+        id_xref = bureau[['SK_ID_CURR', 'SK_ID_BUREAU']]
+        pos_cash = pos_cash.merge(id_xref).drop(['SK_ID_BUREAU', 'SK_ID_PREV'], axis=1)
+
+        # merge bureau ids with application ids
+        pos_cash = self._cat_data_dummies(pos_cash)
+
+        agg_cols = ['CNT_INSTALMENT', 'CNT_INSTALMENT_FUTURE']
+        pos_cash_agg = pos_cash[[*agg_cols, 'SK_ID_CURR']].groupby('SK_ID_CURR').agg(['min', 'max', 'mean'])
+        pos_cash_agg.columns = ['_'.join(a) for a in itertools.product(*pos_cash_agg.columns.levels)]
+
+        pos_cash_sum = pos_cash.drop('MONTHS_BALANCE', axis=1).groupby('SK_ID_CURR').agg(['sum'])
+        pos_cash_sum.columns = ['_'.join(a) for a in itertools.product(*pos_cash_sum.columns.levels)]
+
+        pos_cash_summary = pos_cash_agg.join(pos_cash_sum)
+        return pos_cash_summary
