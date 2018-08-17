@@ -60,7 +60,10 @@ def ensemble_fit_predict():
     # adaboost classifier
     # TODO: grid search on adaboost classifier
     logging.debug('Training adaboost classifier')
-    abc = ABC()
+    abc = ABC(
+        n_estimators=20,
+        learning_rate=1.0
+    )
     abc.fit(data_train_os[0], target_train_os)
 
     train_results[:, 2] = abc.predict(data_train[0]).squeeze()
