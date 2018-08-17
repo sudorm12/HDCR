@@ -94,7 +94,10 @@ class HCDRDataLoader(DataLoader):
         applications = self.read_applications(split_index=None, fit_transform=False, test_data=True)
         joined_train = (applications
                         .join(self._bureau_summary, rsuffix='_BUREAU')
-                        .join(self._previous_summary, rsuffix='_PREVIOUS'))
+                        .join(self._previous_summary, rsuffix='_PREVIOUS')
+                        .join(self._bureau_balance_summary, rsuffix='_BUREAU_BALANCE')
+                        .join(self._cc_balance_summary, rsuffix='_CC_BALANCE')
+                        .join(self._pos_cash_summary, rsuffix='_POS_CASH'))
         meta_data_train = joined_train.combine_first(joined_train.select_dtypes(include=[np.number]).fillna(0))
 
         # scale to zero mean and unit variance
@@ -233,25 +236,69 @@ class HCDRDataLoader(DataLoader):
     def read_bureau(self):
         # read in credit bureau data
         bureau = pd.read_csv('{}/bureau.csv'.format(self._data_dir))
-        bureau_clean = bureau.copy()
 
-        # convert categorical columns to Categorical dtype
-        bureau_clean = self._cat_data_dummies(bureau_clean)
+        # convert categorical columns to dummy values
+        bureau = self._cat_data_dummies(bureau)
 
-        # sum up the numerical data for each applicant for a simple summary
-        bureau_summary = bureau_clean.groupby('SK_ID_CURR').sum()
+        # group by id and aggregate statistics
+        bureau_sum = bureau.drop('SK_ID_BUREAU', axis=1).groupby('SK_ID_CURR').agg(['sum'])
+        bureau_sum.columns = ['_'.join(a) for a in itertools.product(*bureau_sum.columns.levels)]
 
+        agg_cols = [
+            'DAYS_CREDIT',
+            'CREDIT_DAY_OVERDUE',
+            'DAYS_CREDIT_ENDDATE',
+            'DAYS_ENDDATE_FACT',
+            'AMT_CREDIT_MAX_OVERDUE',
+            'CNT_CREDIT_PROLONG',
+            'AMT_CREDIT_SUM',
+            'AMT_CREDIT_SUM_DEBT',
+            'AMT_CREDIT_SUM_LIMIT',
+            'AMT_CREDIT_SUM_OVERDUE',
+            'DAYS_CREDIT_UPDATE',
+            'AMT_ANNUITY'
+        ]
+        bureau_agg = bureau.groupby('SK_ID_CURR')[agg_cols].agg(['max', 'min', 'mean']).fillna(0)
+        bureau_agg.columns = ['_'.join(a) for a in itertools.product(*bureau_agg.columns.levels)]
+
+        bureau_summary = bureau_sum.join(bureau_agg)
         return bureau_summary
 
     def read_previous_application(self):
-        previous_application = pd.read_csv('{}/previous_application.csv'.format(self._data_dir))
-        previous_clean = previous_application.copy()
+        prev_app = pd.read_csv('{}/previous_application.csv'.format(self._data_dir))
 
-        # convert categorical columns to Categorical dtype
-        previous_clean = self._cat_data_dummies(previous_clean)
+        # convert categorical columns to dummy values
+        prev_app = self._cat_data_dummies(prev_app)
 
         # create summary of the data and join them together
-        prev_app_summary = previous_clean.groupby('SK_ID_CURR').sum()
+        prev_app_sum = prev_app.drop('SK_ID_PREV', axis=1).groupby('SK_ID_CURR').agg(['sum'])
+        prev_app_sum.columns = ['_'.join(a) for a in itertools.product(*prev_app_sum.columns.levels)]
+
+        agg_cols = [
+            'AMT_ANNUITY',
+            'AMT_APPLICATION',
+            'AMT_CREDIT',
+            'AMT_DOWN_PAYMENT',
+            'AMT_GOODS_PRICE',
+            'HOUR_APPR_PROCESS_START',
+            'NFLAG_LAST_APPL_IN_DAY',
+            'RATE_DOWN_PAYMENT',
+            'RATE_INTEREST_PRIMARY',
+            'RATE_INTEREST_PRIVILEGED',
+            'DAYS_DECISION',
+            'SELLERPLACE_AREA',
+            'CNT_PAYMENT',
+            'DAYS_FIRST_DRAWING',
+            'DAYS_FIRST_DUE',
+            'DAYS_LAST_DUE_1ST_VERSION',
+            'DAYS_LAST_DUE',
+            'DAYS_TERMINATION',
+            'NFLAG_INSURED_ON_APPROVAL'
+        ]
+        prev_app_agg = prev_app.groupby('SK_ID_CURR')[agg_cols].agg(['max', 'min', 'mean']).fillna(0)
+        prev_app_agg.columns = ['_'.join(a) for a in itertools.product(*prev_app_agg.columns.levels)]
+
+        prev_app_summary = prev_app_sum.join(prev_app_agg)
         return prev_app_summary
 
     def read_credit_card_balance(self, sk_ids=None):
@@ -348,7 +395,6 @@ class HCDRDataLoader(DataLoader):
         # TODO: make id xref a class variable
         bureau = pd.read_csv('data/bureau.csv')
         id_xref = bureau[['SK_ID_CURR', 'SK_ID_BUREAU']]
-        app_ix = self.get_index()
 
         # merge bureau ids with application ids
         bureau_balance = bureau_balance.merge(id_xref).drop(['SK_ID_BUREAU'], axis=1)
