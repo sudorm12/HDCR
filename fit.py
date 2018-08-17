@@ -248,4 +248,4 @@ def multi_lstm_grid_search():
 
 
 if __name__ == "__main__":
-    abc_grid_search()
+    multi_lstm_grid_search()
