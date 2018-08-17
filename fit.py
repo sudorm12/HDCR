@@ -221,7 +221,6 @@ def abc_grid_search():
         'load_time_series': False
     }
     model_args = {
-        'verbose': 1
     }
 
     grid_search(ABC, HCDRDataLoader,
