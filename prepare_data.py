@@ -11,14 +11,19 @@ from loader import DataLoader
 
 
 class HCDRDataLoader(DataLoader):
-    def __init__(self, cc_tmax=25, bureau_tmax=25, pos_tmax=25, data_dir='data', load_time_series=True):
+    def __init__(self, cc_tmax=25, bureau_tmax=25, pos_tmax=25, install_mos_max=30,
+                 data_dir='data', load_time_series=True):
         super().__init__()
         logging.debug('Initializing data loader')
 
+        # directory where input data is stored
         self._data_dir = data_dir
+
+        # max number of months to analyze for each time series input
         self._cc_tmax = cc_tmax
         self._bureau_tmax = bureau_tmax
         self._pos_tmax = pos_tmax
+        self._install_mos_max = install_mos_max
 
         self._curr_home_imputer = SoftImpute()
         self._amt_gp_lr = LinearRegression()
@@ -37,6 +42,7 @@ class HCDRDataLoader(DataLoader):
         self._bureau_balance_summary = self.bureau_balance_summary()
         self._cc_balance_summary = self.cc_balance_summary()
         self._pos_cash_summary = self.pos_cash_summary()
+        self._installments_summary = self.installments_summary()
 
         self._input_shape = None
         self._load_time_series = load_time_series
@@ -58,7 +64,8 @@ class HCDRDataLoader(DataLoader):
                         .join(self._previous_summary, rsuffix='_PREVIOUS')
                         .join(self._bureau_balance_summary, rsuffix='_BUREAU_BALANCE')
                         .join(self._cc_balance_summary, rsuffix='_CC_BALANCE')
-                        .join(self._pos_cash_summary, rsuffix='_POS_CASH'))
+                        .join(self._pos_cash_summary, rsuffix='_POS_CASH')
+                        .join(self._installments_summary, rsuffix='_INSTALL'))
 
         full_data_train = joined_train.combine_first(joined_train.select_dtypes(include=[np.number]).fillna(0))
 
@@ -74,6 +81,7 @@ class HCDRDataLoader(DataLoader):
             cc_data_train = self.read_credit_card_balance(self._applications.index.values[split_index])
             bureau_data_train = self.read_bureau_balance(self._applications.index.values[split_index])
             pos_cash_data_train = self.read_pos_cash(self._applications.index.values[split_index])
+            # TODO: add installments payments time series data
 
             ts_data_shape = [tuple([self._cc_tmax, int(cc_data_train.shape[1] / self._cc_tmax)]),
                              tuple([self._bureau_tmax, int(bureau_data_train.shape[1] / self._bureau_tmax)]),
@@ -97,7 +105,8 @@ class HCDRDataLoader(DataLoader):
                         .join(self._previous_summary, rsuffix='_PREVIOUS')
                         .join(self._bureau_balance_summary, rsuffix='_BUREAU_BALANCE')
                         .join(self._cc_balance_summary, rsuffix='_CC_BALANCE')
-                        .join(self._pos_cash_summary, rsuffix='_POS_CASH'))
+                        .join(self._pos_cash_summary, rsuffix='_POS_CASH')
+                        .join(self._installments_summary, rsuffix='_INSTALL'))
         meta_data_train = joined_train.combine_first(joined_train.select_dtypes(include=[np.number]).fillna(0))
 
         # scale to zero mean and unit variance
@@ -169,7 +178,7 @@ class HCDRDataLoader(DataLoader):
             y = self._amt_gp_lr.predict(x.values.reshape(-1, 1))
             apps_clean.loc[amt_fill_rows, 'AMT_GOODS_PRICE'] = y
 
-        # fit linear regression for annuity amount using credit amount and goods price]
+        # fit linear regression for annuity amount using credit amount and goods price
         if fit_transform:
             amt_lr_rows = apps_clean['AMT_ANNUITY'].notna()
             x = apps_clean.loc[amt_lr_rows][['AMT_CREDIT', 'AMT_GOODS_PRICE']]
@@ -457,3 +466,28 @@ class HCDRDataLoader(DataLoader):
 
         pos_cash_summary = pos_cash_agg.join(pos_cash_sum)
         return pos_cash_summary
+
+    def read_installments(self):
+        installments = pd.read_csv('data/installments_payments.csv')
+        installments = installments[installments['DAYS_INSTALMENT'] > -30. * self._install_mos_max]
+
+        installments['DAYS_INSTALMENT'] = pd.to_timedelta(installments['DAYS_INSTALMENT'], unit='D')
+
+        installments.set_index('DAYS_INSTALMENT', inplace=True)
+        install_sum = (installments[['SK_ID_CURR', 'AMT_INSTALMENT', 'AMT_PAYMENT']]
+                       .groupby([pd.Grouper(freq='30D'), 'SK_ID_CURR']).sum()
+                       .swaplevel(0, 1).sort_index().unstack().fillna(0))
+
+        return install_sum
+
+    def installments_summary(self):
+        # read installment payments csv
+        installments = pd.read_csv('data/installments_payments.csv')
+
+        # calculate aggregate statistics by id
+        installments_agg = (installments
+                            .drop(['SK_ID_PREV'], axis=1)
+                            .groupby('SK_ID_CURR')
+                            .agg(['min', 'max', 'mean', 'sum']))
+        installments_agg.columns = ['_'.join(a) for a in itertools.product(*installments_agg.columns.levels)]
+        return installments_agg

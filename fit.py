@@ -11,8 +11,6 @@ from grid_search import grid_search
 
 
 def ensemble_fit_predict():
-    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-
     loader_args = {
         'cc_tmax': 60,
         'bureau_tmax': 60,
@@ -38,6 +36,7 @@ def ensemble_fit_predict():
     val_results = np.empty((test_samples, num_models))
 
     # dense neural network
+    logging.debug('Training dense neural network')
     model_args = {
         'hidden_dim': 64,
         'num_layers': 1,
@@ -65,7 +64,6 @@ def ensemble_fit_predict():
     val_results[:, 1] = gbc.predict(data_val[0]).squeeze()
 
     # adaboost classifier
-    # TODO: grid search on adaboost classifier
     logging.debug('Training adaboost classifier')
     abc = ABC(
         n_estimators=20,
@@ -77,10 +75,12 @@ def ensemble_fit_predict():
     val_results[:, 2] = abc.predict(data_val[0]).squeeze()
 
     # multi lstm network with metadata
+    logging.debug('Training multi lstm nn')
+
     model_args = {
         'epochs': 50,
-        'batch_size': 512,
-        'lstm_gpu': False,
+        'batch_size': 4048,
+        'lstm_gpu': True,
         'sequence_dense_layers': 0,
         'sequence_dense_width': 8,
         'sequence_l2_reg': 0,
@@ -98,13 +98,12 @@ def ensemble_fit_predict():
 
     input_shape = loader.get_input_shape()
     lstm_nn = MultiLSTMWithMetadata(input_shape, **model_args)
-
-    logging.debug('Training multi lstm nn')
     lstm_nn.fit(data_train_os, target_train_os)
 
     train_results[:, 3] = lstm_nn.predict(data_train).squeeze()
     val_results[:, 3] = lstm_nn.predict(data_val).squeeze()
 
+    # TODO: try voting classifier instead of logistic regression
     lr = LogisticRegression(class_weight='balanced', C=0.1)
     lr.fit(train_results, target_train.values)
 
@@ -202,6 +201,9 @@ def ensemble_fit_val():
 
         y = lr.predict(val_results)
 
+        # TODO: use logistic regression scoring method to score out of sample accuracy
+        # TODO: save accuracy to a file
+
         results = pd.DataFrame(np.concatenate([val_results, y.reshape(-1, 1), target_val_ts.values.reshape(-1, 1)], axis=1))
         results.to_csv('data/results.csv')
 
@@ -273,4 +275,5 @@ def multi_lstm_grid_search():
 
 
 if __name__ == "__main__":
-    multi_lstm_grid_search()
+    logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+    ensemble_fit_predict()

@@ -20,7 +20,7 @@ class DenseNN:
                                   name='dense_{}'.format(i)))
             self._model.add(Dropout(dropout, name='dropout_{}'.format(i)))
 
-        self._model.add(Dense(units=1, activation='sigmoid'))
+        self._model.add(Dense(units=1, activation='sigmoid', name='dense_final'))
 
         self._model.compile(loss='binary_crossentropy',
                             optimizer='Adam',
@@ -47,7 +47,7 @@ class GBC:
         self._model.fit(data_train, target_train)
 
     def predict(self, data):
-        return self._model.predict(data)
+        return self._model.predict_proba(data)[:, 1]
 
 
 class ABC:
@@ -59,7 +59,7 @@ class ABC:
         self._model.fit(data_train, target_train)
 
     def predict(self, data):
-        return self._model.predict(data)
+        return self._model.predict_proba(data)[:, 1]
 
 
 class MultiLSTMWithMetadata:

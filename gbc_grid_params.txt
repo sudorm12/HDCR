@@ -1,4 +1,4 @@
 {
-'max_depth': [7, 10],
-'n_estimators': [10, 20, 30, 40]
+'max_depth': [3],
+'n_estimators': [10]
 }
