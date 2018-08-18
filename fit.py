@@ -54,8 +54,11 @@ def ensemble_fit_predict():
     val_results[:, 0] = dense_nn.predict(data_val[0]).squeeze()
 
     # gradient boosting classifier
-    # TODO: grid search on gradient boosting classifier
-    gbc = GBC()
+    logging.debug('Training gradient boosting classifier')
+    gbc = GBC(
+        max_depth=7,
+        n_estimators=20
+    )
     gbc.fit(data_train_os[0], target_train_os)
 
     train_results[:, 1] = gbc.predict(data_train[0]).squeeze()
@@ -63,7 +66,11 @@ def ensemble_fit_predict():
 
     # adaboost classifier
     # TODO: grid search on adaboost classifier
-    abc = ABC()
+    logging.debug('Training adaboost classifier')
+    abc = ABC(
+        n_estimators=20,
+        learning_rate=1.0
+    )
     abc.fit(data_train_os[0], target_train_os)
 
     train_results[:, 2] = abc.predict(data_train[0]).squeeze()
@@ -72,8 +79,8 @@ def ensemble_fit_predict():
     # multi lstm network with metadata
     model_args = {
         'epochs': 50,
-        'batch_size': 1024,
-        'lstm_gpu': True,
+        'batch_size': 512,
+        'lstm_gpu': False,
         'sequence_dense_layers': 0,
         'sequence_dense_width': 8,
         'sequence_l2_reg': 0,
@@ -92,6 +99,7 @@ def ensemble_fit_predict():
     input_shape = loader.get_input_shape()
     lstm_nn = MultiLSTMWithMetadata(input_shape, **model_args)
 
+    logging.debug('Training multi lstm nn')
     lstm_nn.fit(data_train_os, target_train_os)
 
     train_results[:, 3] = lstm_nn.predict(data_train).squeeze()
@@ -233,6 +241,19 @@ def dense_nn_grid_search():
                 random_oversample=True)
 
 
+def abc_grid_search():
+    loader_args = {
+        'load_time_series': False
+    }
+    model_args = {
+    }
+
+    grid_search(ABC, HCDRDataLoader,
+                hp_file='abc_grid_params.txt',
+                loader_args=loader_args, model_args=model_args,
+                random_oversample=True)
+
+
 def multi_lstm_grid_search():
     loader_args = {
         'cc_tmax': 60,
@@ -252,4 +273,4 @@ def multi_lstm_grid_search():
 
 
 if __name__ == "__main__":
-    dense_nn_grid_search()
+    multi_lstm_grid_search()

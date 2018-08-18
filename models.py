@@ -51,10 +51,11 @@ class GBC:
 
 
 class ABC:
-    def __init__(self, input_shape=None, n_estimators=10):
-        self._model = AdaBoostClassifier(n_estimators=n_estimators)
+    def __init__(self, input_shape=None, n_estimators=10, learning_rate=1):
+        self._model = AdaBoostClassifier(n_estimators=n_estimators,
+                                         learning_rate=learning_rate)
 
-    def fit(self, data_train, target_train):
+    def fit(self, data_train, target_train, validation_data=None):
         self._model.fit(data_train, target_train)
 
     def predict(self, data):
