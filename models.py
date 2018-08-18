@@ -4,11 +4,12 @@ from keras.regularizers import l2
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
 
 
-class LinearNN:
+class DenseNN:
     def __init__(self, input_dim, hidden_dim=64, num_layers=1, l2_reg=0, 
-                 epochs=5, batch_size=256, dropout=0):
+                 epochs=5, batch_size=256, dropout=0, verbose=1):
         self._epochs = epochs
         self._batch_size = batch_size
+        self._verbose = verbose
         self._model = Sequential()
 
         for i in range(num_layers):
@@ -25,12 +26,12 @@ class LinearNN:
                             optimizer='Adam',
                             metrics=['accuracy'])
 
-    def fit(self, data_train, target_train, validation_data=None, verbose=2):
+    def fit(self, data_train, target_train, validation_data=None):
         self._model.fit(data_train, target_train,
                         epochs=self._epochs,
                         batch_size=self._batch_size,
                         validation_data=validation_data,
-                        verbose=verbose)
+                        verbose=self._verbose)
 
     def predict(self, data):
         return self._model.predict(data)

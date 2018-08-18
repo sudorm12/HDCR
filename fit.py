@@ -6,7 +6,7 @@ from prepare_data import HCDRDataLoader
 from sklearn.linear_model import LogisticRegression
 from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import KFold
-from models import LinearNN, GBC, ABC, MultiLSTMWithMetadata
+from models import DenseNN, GBC, ABC, MultiLSTMWithMetadata
 from grid_search import grid_search
 
 
@@ -37,13 +37,21 @@ def ensemble_fit_predict():
     train_results = np.empty((train_samples, num_models))
     val_results = np.empty((test_samples, num_models))
 
-    # train on linear neural network
-    # TODO: add dropout and regularization
-    linear_nn = LinearNN(data_train_os[0].shape[1], epochs=25)
-    linear_nn.fit(data_train_os[0], target_train_os)
+    # dense neural network
+    model_args = {
+        'hidden_dim': 64,
+        'num_layers': 1,
+        'l2_reg': 5e-5,
+        'epochs': 20,
+        'batch_size': 1024,
+        'dropout': 0.4
+    }
 
-    train_results[:, 0] = linear_nn.predict(data_train[0]).squeeze()
-    val_results[:, 0] = linear_nn.predict(data_val[0]).squeeze()
+    dense_nn = DenseNN(data_train_os[0].shape[1], *model_args)
+    dense_nn.fit(data_train_os[0], target_train_os)
+
+    train_results[:, 0] = dense_nn.predict(data_train[0]).squeeze()
+    val_results[:, 0] = dense_nn.predict(data_val[0]).squeeze()
 
     # gradient boosting classifier
     # TODO: grid search on gradient boosting classifier
@@ -61,6 +69,7 @@ def ensemble_fit_predict():
     train_results[:, 2] = abc.predict(data_train[0]).squeeze()
     val_results[:, 2] = abc.predict(data_val[0]).squeeze()
 
+    # multi lstm network with metadata
     model_args = {
         'epochs': 50,
         'batch_size': 1024,
@@ -70,7 +79,7 @@ def ensemble_fit_predict():
         'sequence_l2_reg': 0,
         'meta_dense_layers': 1,
         'meta_dense_width': 64,
-        'meta_l2_reg': 1e-5,
+        'meta_l2_reg': 1e-4,
         'meta_dropout': 0.2,
         'comb_dense_layers': 3,
         'comb_dense_width': 64,
@@ -134,7 +143,7 @@ def ensemble_fit_val():
         val_results = np.empty((val_samples, num_models))
 
         # train on linear neural network
-        linear_nn = LinearNN(data_train_ts_os[0].shape[1], epochs=25)
+        linear_nn = DenseNN(data_train_ts_os[0].shape[1], epochs=25)
         linear_nn.fit(data_train_ts_os[0], target_train_ts_os, validation_data=(data_val_ts[0], target_val_ts))
 
         train_results[:, 0] = linear_nn.predict(data_train_ts[0]).squeeze()
@@ -210,6 +219,20 @@ def gbc_grid_search():
                 random_oversample=True)
 
 
+def dense_nn_grid_search():
+    loader_args = {
+        'load_time_series': False
+    }
+    model_args = {
+        'verbose': 1
+    }
+
+    grid_search(DenseNN, HCDRDataLoader,
+                hp_file='dense_grid_params.txt',
+                loader_args=loader_args, model_args=model_args,
+                random_oversample=True)
+
+
 def multi_lstm_grid_search():
     loader_args = {
         'cc_tmax': 60,
@@ -223,10 +246,10 @@ def multi_lstm_grid_search():
     }
 
     grid_search(MultiLSTMWithMetadata, HCDRDataLoader,
-                hp_file='grid_search_params.txt',
+                hp_file='lstm_grid_params.txt',
                 loader_args=loader_args, model_args=model_args,
                 random_oversample=True)
 
 
 if __name__ == "__main__":
-    gbc_grid_search()
+    dense_nn_grid_search()

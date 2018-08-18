@@ -83,7 +83,7 @@ class HCDRDataLoader(DataLoader):
             self._input_shape = [meta_data_shape, *ts_data_shape]
         else:
             data_train = meta_data_train
-            self._input_shape = meta_data_shape
+            self._input_shape = meta_data_shape[0]
 
         logging.debug(self._input_shape)
 
