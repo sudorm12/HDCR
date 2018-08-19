@@ -81,20 +81,24 @@ class HCDRDataLoader(DataLoader):
             cc_data_train = self.read_credit_card_balance(self._applications.index.values[split_index])
             bureau_data_train = self.read_bureau_balance(self._applications.index.values[split_index])
             pos_cash_data_train = self.read_pos_cash(self._applications.index.values[split_index])
-            # TODO: add installments payments time series data
+            install_data_train = self.read_installments(self._applications.index.values[split_index])
 
             ts_data_shape = [tuple([self._cc_tmax, int(cc_data_train.shape[1] / self._cc_tmax)]),
                              tuple([self._bureau_tmax, int(bureau_data_train.shape[1] / self._bureau_tmax)]),
-                             tuple([self._pos_tmax, int(pos_cash_data_train.shape[1] / self._pos_tmax)])]
+                             tuple([self._pos_tmax, int(pos_cash_data_train.shape[1] / self._pos_tmax)]),
+                             tuple([install_data_train.shape[1] // 2, 2])]
 
-            data_train = [meta_data_train, cc_data_train, bureau_data_train, pos_cash_data_train]
+            data_train = [meta_data_train,
+                          cc_data_train,
+                          bureau_data_train,
+                          pos_cash_data_train,
+                          install_data_train]
             self._input_shape = [meta_data_shape, *ts_data_shape]
         else:
             data_train = meta_data_train
             self._input_shape = meta_data_shape[0]
 
-        logging.debug(self._input_shape)
-
+        logging.debug('Data loaded with input shape {}'.format(self._input_shape))
         return data_train, target_train
 
     def load_test_data(self, load_time_series=True):
@@ -117,20 +121,25 @@ class HCDRDataLoader(DataLoader):
             cc_data_train = self.read_credit_card_balance(self.get_test_index().values)
             bureau_data_train = self.read_bureau_balance(self.get_test_index().values)
             pos_cash_data_train = self.read_pos_cash(self.get_test_index().values)
+            install_data_train = self.read_installments(self.get_test_index().values)
 
             ts_data_shape = [tuple([self._cc_tmax, int(cc_data_train.shape[1] / self._cc_tmax)]),
                              tuple([self._bureau_tmax, int(bureau_data_train.shape[1] / self._bureau_tmax)]),
-                             tuple([self._pos_tmax, int(pos_cash_data_train.shape[1] / self._pos_tmax)])]
+                             tuple([self._pos_tmax, int(pos_cash_data_train.shape[1] / self._pos_tmax)]),
+                             tuple([install_data_train.shape[1] // 2, 2])]
 
-            data_train = [meta_data_train, cc_data_train, bureau_data_train, pos_cash_data_train]
+            data_train = [meta_data_train,
+                          cc_data_train,
+                          bureau_data_train,
+                          pos_cash_data_train,
+                          install_data_train]
             self._input_shape = [meta_data_shape, *ts_data_shape]
         else:
             data_train = meta_data_train
             self._input_shape = meta_data_shape
 
-        # determine input shapes
         logging.debug(self._input_shape)
-
+        logging.debug('Test data loaded with input shape {}'.format(self._input_shape))
         return data_train
 
     def get_input_shape(self):
@@ -362,6 +371,8 @@ class HCDRDataLoader(DataLoader):
         return cc_balance_sum
 
     def read_bureau_balance(self, sk_ids=None):
+        logging.debug('Preparing credit bureau balance data...')
+
         # read bureau balance csv and full list of id values
         bureau_balance = pd.read_csv('{}/bureau_balance.csv'.format(self._data_dir))
         bureau = pd.read_csv('data/bureau.csv')
@@ -384,7 +395,6 @@ class HCDRDataLoader(DataLoader):
         missing_df = pd.DataFrame({'SK_ID_CURR': missing_ids})
         missing_df['MONTHS_BALANCE'] = -1
 
-        logging.debug('Preparing credit bureau balance data...')
         bureau_ts_summary = (bureau_balance
                              .append(missing_df)
                              .fillna(0)
@@ -418,6 +428,8 @@ class HCDRDataLoader(DataLoader):
         return bureau_bal_sum
 
     def read_pos_cash(self, sk_ids=None):
+        logging.debug('Preparing POS cash data...')
+
         # read pos cash csv and full list of id values
         pos_cash = pd.read_csv('data/POS_CASH_balance.csv')
         bureau = pd.read_csv('data/bureau.csv')
@@ -436,7 +448,6 @@ class HCDRDataLoader(DataLoader):
         missing_df = pd.DataFrame({'SK_ID_CURR': missing_ids})
         missing_df['MONTHS_BALANCE'] = -1
 
-        logging.debug('Preparing POS cash data...')
         pos_cash_summary = (pos_cash
                             .append(missing_df)
                             .fillna(0)
@@ -467,18 +478,36 @@ class HCDRDataLoader(DataLoader):
         pos_cash_summary = pos_cash_agg.join(pos_cash_sum)
         return pos_cash_summary
 
-    def read_installments(self):
+    def read_installments(self, sk_ids=None):
+        logging.debug('Preparing installment plan data...')
         installments = pd.read_csv('data/installments_payments.csv')
+
+        # select all training data if no specific index is given
+        if sk_ids is None:
+            app_ix = self.get_index()
+            sk_ids = app_ix.values
+        installments = installments[installments['SK_ID_CURR'].isin(sk_ids)]
+
+        # filter out data past given time window
         installments = installments[installments['DAYS_INSTALMENT'] > -30. * self._install_mos_max]
 
-        installments['DAYS_INSTALMENT'] = pd.to_timedelta(installments['DAYS_INSTALMENT'], unit='D')
+        # fill missing id values with na data
+        missing_ids = sk_ids[~np.isin(sk_ids, installments['SK_ID_CURR'].unique())]
+        missing_df = pd.DataFrame({'SK_ID_CURR': missing_ids})
+        missing_df['DAYS_INSTALMENT'] = -1
+        installments = installments.append(missing_df)
 
+        # convert to timedelta index
+        installments['DAYS_INSTALMENT'] = pd.to_timedelta(installments['DAYS_INSTALMENT'], unit='D')
         installments.set_index('DAYS_INSTALMENT', inplace=True)
+
+        # sum AMT_INSTALMENT and AMT_PAYMENT for each 30 day period per id
         install_sum = (installments[['SK_ID_CURR', 'AMT_INSTALMENT', 'AMT_PAYMENT']]
                        .groupby([pd.Grouper(freq='30D'), 'SK_ID_CURR']).sum()
                        .swaplevel(0, 1).sort_index().unstack().fillna(0))
 
-        return install_sum
+        logging.debug('Done')
+        return install_sum.values
 
     def installments_summary(self):
         # read installment payments csv

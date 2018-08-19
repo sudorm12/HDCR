@@ -46,7 +46,7 @@ def ensemble_fit_predict():
         'dropout': 0.4
     }
 
-    dense_nn = DenseNN(data_train_os[0].shape[1], *model_args)
+    dense_nn = DenseNN(data_train_os[0].shape[1], **model_args)
     dense_nn.fit(data_train_os[0], target_train_os)
 
     train_results[:, 0] = dense_nn.predict(data_train[0]).squeeze()
@@ -78,7 +78,7 @@ def ensemble_fit_predict():
     logging.debug('Training multi lstm nn')
 
     model_args = {
-        'epochs': 50,
+        'epochs': 35,
         'batch_size': 4048,
         'lstm_gpu': True,
         'sequence_dense_layers': 0,
@@ -91,7 +91,7 @@ def ensemble_fit_predict():
         'comb_dense_layers': 3,
         'comb_dense_width': 64,
         'comb_l2_reg': 1e-6,
-        'comb_dropout': 0.2,
+        'comb_dropout': 0.1,
         'lstm_units': 8,
         'lstm_l2_reg': 1e-7
     }
@@ -201,7 +201,7 @@ def ensemble_fit_val():
 
         y = lr.predict(val_results)
 
-        # TODO: use logistic regression scoring method to score out of sample accuracy
+        # TODO: use logistic regression built-in scoring method to score out of sample accuracy
         # TODO: save accuracy to a file
 
         results = pd.DataFrame(np.concatenate([val_results, y.reshape(-1, 1), target_val_ts.values.reshape(-1, 1)], axis=1))
@@ -276,4 +276,4 @@ def multi_lstm_grid_search():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-    ensemble_fit_predict()
+    multi_lstm_grid_search()
