@@ -84,16 +84,16 @@ def ensemble_fit_predict():
         'sequence_dense_layers': 0,
         'sequence_dense_width': 8,
         'sequence_l2_reg': 0,
-        'meta_dense_layers': 1,
+        'meta_dense_layers': 3,
         'meta_dense_width': 64,
-        'meta_l2_reg': 1e-4,
+        'meta_l2_reg': 1e-5,
         'meta_dropout': 0.2,
         'comb_dense_layers': 3,
         'comb_dense_width': 64,
-        'comb_l2_reg': 1e-6,
+        'comb_l2_reg': 1e-5,
         'comb_dropout': 0.1,
         'lstm_units': 8,
-        'lstm_l2_reg': 1e-7
+        'lstm_l2_reg': 1e-5
     }
 
     input_shape = loader.get_input_shape()
