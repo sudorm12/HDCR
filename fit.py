@@ -186,6 +186,9 @@ def ensemble_fit_val():
         )
         abc.fit(data_train_os[0], target_train_os)
 
+        # TODO: try sklearn.svm.SVC or sklearn.svm.LinearSVC classifier
+        # TODO: try sklearn.tree.DecisionTreeClassifier
+
         train_results[:, 2] = abc.predict(data_train[0]).squeeze()
         val_results[:, 2] = abc.predict(data_val[0]).squeeze()
 
