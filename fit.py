@@ -130,6 +130,7 @@ def ensemble_fit_val():
     loader = HCDRDataLoader(**loader_args)
     app_ix = loader.get_index()
     scores = np.zeros(4)
+    scores_path = 'data/results/ensemble_scores_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
 
     kf = KFold(n_splits=4, shuffle=True)
     for j, fold_indexes in enumerate(kf.split(app_ix)):
@@ -214,6 +215,7 @@ def ensemble_fit_val():
         train_results[:, 3] = lstm_nn.predict(data_train).squeeze()
         val_results[:, 3] = lstm_nn.predict(data_val).squeeze()
 
+        # TODO: try subtracting 0.5 from results before fitting logistic regression
         lr = LogisticRegression(class_weight='balanced', C=0.1, fit_intercept=False)
         lr.fit(train_results, target_train.values)
 
@@ -231,8 +233,7 @@ def ensemble_fit_val():
 
         raw_results = pd.DataFrame(np.concatenate([val_results, y.reshape(-1, 1), target_val.values.reshape(-1, 1)], axis=1))
         raw_results.to_csv('data/results/val_results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now()))
-        
-        scores_path = 'data/results/ensemble_scores_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
+
         pd.DataFrame({'score': scores}).to_csv(scores_path)
 
 # TODO: add method for reading validation results from a file
