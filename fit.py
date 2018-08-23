@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+import itertools
 import numpy as np
 import pandas as pd
 from prepare_data import HCDRDataLoader
@@ -79,8 +80,8 @@ def ensemble_fit_predict():
 
     model_args = {
         'epochs': 35,
-        'batch_size': 4048,
-        'lstm_gpu': True,
+        'batch_size': 1024,
+        'lstm_gpu': False,
         'sequence_dense_layers': 0,
         'sequence_dense_width': 8,
         'sequence_l2_reg': 0,
@@ -92,7 +93,7 @@ def ensemble_fit_predict():
         'comb_dense_width': 64,
         'comb_l2_reg': 1e-5,
         'comb_dropout': 0.1,
-        'lstm_units': 8,
+        'lstm_units': 6,
         'lstm_l2_reg': 1e-5
     }
 
@@ -104,7 +105,7 @@ def ensemble_fit_predict():
     val_results[:, 3] = lstm_nn.predict(data_val).squeeze()
 
     # TODO: try voting classifier instead of logistic regression
-    lr = LogisticRegression(class_weight='balanced', C=0.1)
+    lr = LogisticRegression(class_weight='balanced', C=0.1, fit_intercept=False)
     lr.fit(train_results, target_train.values)
 
     y = lr.predict(val_results)
@@ -128,92 +129,113 @@ def ensemble_fit_val():
 
     loader = HCDRDataLoader(**loader_args)
     app_ix = loader.get_index()
+    scores = np.zeros(4)
 
     kf = KFold(n_splits=4, shuffle=True)
-    for fold_indexes in kf.split(app_ix):
+    for j, fold_indexes in enumerate(kf.split(app_ix)):
         # load training and test data
-        data_train_ts, target_train_ts, data_val_ts, target_val_ts = loader.load_train_val(fold_indexes[0], fold_indexes[1])
+        data_train, target_train, data_val, target_val = loader.load_train_val(fold_indexes[0], fold_indexes[1])
         input_shape = loader.get_input_shape()
 
         # oversample troubled loans to make up for imbalance
         ros = RandomOverSampler()
-        os_index, target_train_os = ros.fit_sample(np.arange(data_train_ts[0].shape[0]).reshape(-1, 1), target_train_ts)
-        data_train_ts_os = [data_train_part[os_index.squeeze()] for data_train_part in data_train_ts]
-        target_train_ts_os = target_train_ts.values[os_index.squeeze()]
+        os_index, target_train_os = ros.fit_sample(np.arange(data_train[0].shape[0]).reshape(-1, 1), target_train)
+        data_train_os = [data_train_part[os_index.squeeze()] for data_train_part in data_train]
 
-        # data_train_os = data_train[os_index.squeeze()]
         # use predict on out of sample data and store results for each model
         num_models = 4
-        train_samples = target_train_ts.shape[0]
-        val_samples = target_val_ts.shape[0]
+        train_samples = target_train.shape[0]
+        val_samples = target_val.shape[0]
         train_results = np.empty((train_samples, num_models))
         val_results = np.empty((val_samples, num_models))
 
-        # train on linear neural network
-        linear_nn = DenseNN(data_train_ts_os[0].shape[1], epochs=25)
-        linear_nn.fit(data_train_ts_os[0], target_train_ts_os, validation_data=(data_val_ts[0], target_val_ts))
+        # dense neural network
+        logging.debug('Training dense neural network')
+        model_args = {
+            'hidden_dim': 64,
+            'num_layers': 1,
+            'l2_reg': 5e-5,
+            'epochs': 20,
+            'batch_size': 1024,
+            'dropout': 0.4
+        }
 
-        train_results[:, 0] = linear_nn.predict(data_train_ts[0]).squeeze()
-        val_results[:, 0] = linear_nn.predict(data_val_ts[0]).squeeze()
+        dense_nn = DenseNN(data_train_os[0].shape[1], **model_args)
+        dense_nn.fit(data_train_os[0], target_train_os)
+
+        train_results[:, 0] = dense_nn.predict(data_train[0]).squeeze()
+        val_results[:, 0] = dense_nn.predict(data_val[0]).squeeze()
 
         # gradient boosting classifier
-        gbc = GBC()
-        gbc.fit(data_train_ts_os[0], target_train_os)
+        logging.debug('Training gradient boosting classifier')
+        gbc = GBC(
+            max_depth=7,
+            n_estimators=20
+        )
+        gbc.fit(data_train_os[0], target_train_os)
 
-        train_results[:, 1] = gbc.predict(data_train_ts[0]).squeeze()
-        val_results[:, 1] = gbc.predict(data_val_ts[0]).squeeze()
+        train_results[:, 1] = gbc.predict(data_train[0]).squeeze()
+        val_results[:, 1] = gbc.predict(data_val[0]).squeeze()
 
         # adaboost classifier
-        abc = ABC()
-        abc.fit(data_train_ts_os[0], target_train_os)
+        logging.debug('Training adaboost classifier')
+        abc = ABC(
+            n_estimators=20,
+            learning_rate=1.0
+        )
+        abc.fit(data_train_os[0], target_train_os)
 
-        train_results[:, 2] = abc.predict(data_train_ts[0]).squeeze()
-        val_results[:, 2] = abc.predict(data_val_ts[0]).squeeze()
+        train_results[:, 2] = abc.predict(data_train[0]).squeeze()
+        val_results[:, 2] = abc.predict(data_val[0]).squeeze()
 
         model_args = {
-            'epochs': 1,
-            'batch_size': 256,
+            'epochs': 35,
+            'batch_size': 1024,
             'lstm_gpu': False,
             'sequence_dense_layers': 0,
             'sequence_dense_width': 8,
             'sequence_l2_reg': 0,
-            'meta_dense_layers': 1,
+            'meta_dense_layers': 3,
             'meta_dense_width': 64,
             'meta_l2_reg': 1e-5,
             'meta_dropout': 0.2,
             'comb_dense_layers': 3,
             'comb_dense_width': 64,
-            'comb_l2_reg': 1e-6,
-            'comb_dropout': 0.2,
-            'lstm_units': 8,
-            'lstm_l2_reg': 1e-7
+            'comb_l2_reg': 1e-5,
+            'comb_dropout': 0.1,
+            'lstm_units': 6,
+            'lstm_l2_reg': 1e-5
         }
 
         lstm_nn = MultiLSTMWithMetadata(input_shape, **model_args)
 
-        lstm_nn.fit(data_train_ts_os, target_train_os, validation_data=(data_val_ts, target_val_ts))
+        lstm_nn.fit(data_train_os, target_train_os, validation_data=(data_val, target_val))
 
-        train_results[:, 3] = lstm_nn.predict(data_train_ts).squeeze()
-        val_results[:, 3] = lstm_nn.predict(data_val_ts).squeeze()
+        train_results[:, 3] = lstm_nn.predict(data_train).squeeze()
+        val_results[:, 3] = lstm_nn.predict(data_val).squeeze()
 
-        lr = LogisticRegression(class_weight='balanced')
-        lr.fit(train_results, target_train_ts.values)
+        lr = LogisticRegression(class_weight='balanced', C=0.1, fit_intercept=False)
+        lr.fit(train_results, target_train.values)
 
         y = lr.predict(val_results)
 
-        # TODO: use logistic regression built-in scoring method to score out of sample accuracy
-        # TODO: save accuracy to a file
+        # use logistic regression built-in scoring method to score out of sample accuracy
+        scores[j] = lr.score(train_results, target_train.values)
 
-        results = pd.DataFrame(np.concatenate([val_results, y.reshape(-1, 1), target_val_ts.values.reshape(-1, 1)], axis=1))
-        results.to_csv('data/results.csv')
+        #results = pd.DataFrame(np.concatenate([val_results, y.reshape(-1, 1), target_val.values.reshape(-1, 1)], axis=1))
+        #results.to_csv('data/results.csv')
 
         results_path = 'data/results/results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
-        results = pd.DataFrame({'TARGET': target_val_ts.values, 'PREDICTION': y})
+        results = pd.DataFrame({'TARGET': target_val.values, 'PREDICTION': y})
         results.to_csv(results_path)
 
-        raw_results = pd.DataFrame(np.concatenate([val_results, y.reshape(-1, 1), target_val_ts.values.reshape(-1, 1)], axis=1))
-        raw_results.to_csv('data/results/raw_results{:%Y%m%d_%H%M%S}.csv'.format(datetime.now()))
+        raw_results = pd.DataFrame(np.concatenate([val_results, y.reshape(-1, 1), target_val.values.reshape(-1, 1)], axis=1))
+        raw_results.to_csv('data/results/val_results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now()))
+        
+        scores_path = 'data/results/ensemble_scores_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
+        pd.DataFrame({'score': scores}).to_csv(scores_path)
 
+# TODO: add method for reading validation results from a file
 
 def gbc_grid_search():
     loader_args = {
@@ -276,4 +298,4 @@ def multi_lstm_grid_search():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-    multi_lstm_grid_search()
+    ensemble_fit_val()
