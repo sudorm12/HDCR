@@ -280,7 +280,7 @@ def gbc_grid_search():
         'load_time_series': False
     }
     model_args = {
-        'verbose': 1
+        'verbose': 0
     }
 
     grid_search(GBC, HCDRDataLoader,
