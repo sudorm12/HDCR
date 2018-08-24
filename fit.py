@@ -9,6 +9,8 @@ from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import KFold
 from models import DenseNN, GBC, ABC, MultiLSTMWithMetadata
 from grid_search import grid_search
+from sklearn.svm import LinearSVC
+from sklearn.metrics import confusion_matrix
 
 
 def ensemble_fit_predict():
@@ -221,15 +223,15 @@ def ensemble_fit_val():
 
         # TODO: try subtracting 0.5 from results before fitting logistic regression
         lr = LogisticRegression(class_weight='balanced', C=0.1, fit_intercept=False)
-        lr.fit(train_results, target_train.values)
+        lr.fit(train_results - 0.5, target_train.values)
 
         y = lr.predict(val_results)
 
         # use logistic regression built-in scoring method to score out of sample accuracy
         scores[j] = lr.score(train_results, target_train.values)
 
-        #results = pd.DataFrame(np.concatenate([val_results, y.reshape(-1, 1), target_val.values.reshape(-1, 1)], axis=1))
-        #results.to_csv('data/results.csv')
+        # results = pd.DataFrame(np.concatenate([val_results, y.reshape(-1, 1), target_val.values.reshape(-1, 1)], axis=1))
+        # results.to_csv('data/results.csv')
 
         results_path = 'data/results/results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
         results = pd.DataFrame({'TARGET': target_val.values, 'PREDICTION': y})
@@ -240,7 +242,28 @@ def ensemble_fit_val():
 
         pd.DataFrame({'score': scores}).to_csv(scores_path)
 
+
 # TODO: add method for reading validation results from a file
+def ensemble_val_from_file(filename):
+    raw_results = pd.read_csv(filename)
+    raw_results.columns = [
+        'dense_nn',
+        'gbc',
+        'abc',
+        'lstm',
+        'y',
+        'target'
+    ]
+
+    lr_params = {
+        'C': 1,
+        'class_weight': 'balanced',
+        'fit_intercept': False
+    }
+
+    lr = LogisticRegression(**lr_params)
+    lr.fit(raw_results[['dense_nn', 'gbc', 'abc', 'lstm']], raw_results['target'])
+
 
 def gbc_grid_search():
     loader_args = {
@@ -283,6 +306,32 @@ def abc_grid_search():
                 random_oversample=True)
 
 
+def svc_grid_search():
+    loader_args = {
+        'load_time_series': False
+    }
+    model_args = {
+        'class_weight': 'balanced',
+        'verbose': 1
+    }
+
+    loader = HCDRDataLoader(**loader_args)
+    app_ix = loader.get_index()
+
+    kf = KFold(n_splits=4, shuffle=True)
+    for j, fold_indexes in enumerate(kf.split(app_ix)):
+        pass
+
+    # load training and test data
+    data_train, target_train, data_val, target_val = loader.load_train_val(fold_indexes[0], fold_indexes[1])
+
+    svc = LinearSVC(**model_args)
+    svc.fit(data_train, target_train)
+
+    logging.debug(svc.score(data_val, target_val))
+    logging.debug(confusion_matrix(target_val, svc.predict(data_val)))
+
+
 def multi_lstm_grid_search():
     loader_args = {
         'cc_tmax': 60,
@@ -303,4 +352,7 @@ def multi_lstm_grid_search():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+    file = 'data/results/raw_results20180819_044627.csv'
+    # svc_grid_search()
+    # ensemble_val_from_file(file)
     ensemble_fit_val()
