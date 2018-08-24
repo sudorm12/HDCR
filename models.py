@@ -38,11 +38,12 @@ class DenseNN:
 
 
 class GBC:
-    def __init__(self, input_shape=None, n_estimators=10, max_depth=3, verbose=0, min_samples_split=2):
+    def __init__(self, input_shape=None, n_estimators=10, max_depth=3, verbose=0, min_samples_split=2, learning_rate=0.1):
         self._model = GradientBoostingClassifier(n_estimators=n_estimators,
                                                  max_depth=max_depth,
                                                  verbose=verbose,
-                                                 min_samples_split=min_samples_split)
+                                                 min_samples_split=min_samples_split,
+                                                 learning_rate=learning_rate)
 
     def fit(self, data_train, target_train, validation_data=None):
         self._model.fit(data_train, target_train)

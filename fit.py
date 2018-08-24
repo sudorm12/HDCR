@@ -135,6 +135,7 @@ def ensemble_fit_val():
     loader = HCDRDataLoader(**loader_args)
     app_ix = loader.get_index()
     scores = np.zeros(4)
+    coefs = np.zeros((4, 4))
     scores_path = 'data/results/ensemble_scores_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
 
     kf = KFold(n_splits=4, shuffle=True)
@@ -227,15 +228,25 @@ def ensemble_fit_val():
         lr = LogisticRegression(class_weight='balanced', C=0.1, fit_intercept=False)
         lr.fit(train_results - 0.5, target_train.values)
 
-        y = lr.predict(val_results)
+        y = lr.predict(val_results - 0.5)
 
         # use logistic regression built-in scoring method to score out of sample accuracy
-        scores[j] = lr.score(train_results, target_train.values)
-        cm = confusion_matrix(target_val, y)
+        scores[j] = lr.score(val_results - 0.5, target_val.values)
+        # cm = confusion_matrix(target_val, y)
+
+        vlr = LogisticRegression(class_weight='balanced', C=0.1, fit_intercept=False)
+        vlr.fit(val_results - 0.5, target_val.values)
+        coefs[j, :] = vlr.coef_
+        coefs_path = 'data/results/ensemble_coef_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
+        coefs = pd.DataFrame(coefs)
+        coefs.to_csv(coefs_path)
 
         results_path = 'data/results/results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
         results = pd.DataFrame({'TARGET': target_val.values, 'PREDICTION': y})
         results.to_csv(results_path)
+
+        train_cls = pd.DataFrame(np.concatenate([train_results, target_train.values.reshape(-1, 1)], axis=1))
+        train_cls.to_csv('data/results/train_results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now()))
 
         raw_results = pd.DataFrame(np.concatenate([val_results, y.reshape(-1, 1), target_val.values.reshape(-1, 1)], axis=1))
         raw_results.to_csv('data/results/val_results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now()))
@@ -251,7 +262,6 @@ def ensemble_val_from_file(filename):
         'gbc',
         'abc',
         'lstm',
-        'y',
         'target'
     ]
 

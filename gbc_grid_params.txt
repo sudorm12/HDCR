@@ -1,5 +1,6 @@
 {
 'max_depth': [3],
 'n_estimators': [10, 20, 30],
-'min_samples_split': [0.01]
+'min_samples_split': [0.01],
+'learning_rate': [0.2]
 }
