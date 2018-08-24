@@ -11,6 +11,7 @@ from models import DenseNN, GBC, ABC, MultiLSTMWithMetadata
 from grid_search import grid_search
 from sklearn.svm import LinearSVC
 from sklearn.metrics import confusion_matrix
+from sklearn.tree import DecisionTreeClassifier
 
 
 def ensemble_fit_predict():
@@ -312,7 +313,10 @@ def svc_grid_search():
     }
     model_args = {
         'class_weight': 'balanced',
-        'verbose': 1
+        'verbose': 1,
+        'dual': False,
+        'tol': 1e-4,
+        'max_iter': 1000
     }
 
     loader = HCDRDataLoader(**loader_args)
@@ -330,6 +334,32 @@ def svc_grid_search():
 
     logging.debug(svc.score(data_val, target_val))
     logging.debug(confusion_matrix(target_val, svc.predict(data_val)))
+
+
+def dtc_grid_search():
+    loader_args = {
+        'load_time_series': False
+    }
+    model_args = {
+        'class_weight': 'balanced',
+    }
+
+    loader = HCDRDataLoader(**loader_args)
+    app_ix = loader.get_index()
+
+    kf = KFold(n_splits=4, shuffle=True)
+    for j, fold_indexes in enumerate(kf.split(app_ix)):
+        pass
+
+    # load training and test data
+    data_train, target_train, data_val, target_val = loader.load_train_val(fold_indexes[0], fold_indexes[1])
+
+    dtc = DecisionTreeClassifier(**model_args)
+    dtc.fit(data_train, target_train)
+
+    logging.debug(dtc.score(data_val, target_val))
+    logging.debug(confusion_matrix(target_val, dtc.predict(data_val)))
+
 
 
 def multi_lstm_grid_search():
@@ -353,6 +383,6 @@ def multi_lstm_grid_search():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
     file = 'data/results/raw_results20180819_044627.csv'
-    # svc_grid_search()
+    dtc_grid_search()
     # ensemble_val_from_file(file)
-    ensemble_fit_val()
+    # ensemble_fit_val()
