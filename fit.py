@@ -12,6 +12,7 @@ from grid_search import grid_search
 from sklearn.svm import LinearSVC
 from sklearn.metrics import confusion_matrix
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import confusion_matrix
 
 
 def ensemble_fit_predict():
@@ -174,7 +175,7 @@ def ensemble_fit_val():
         # gradient boosting classifier
         logging.debug('Training gradient boosting classifier')
         gbc = GBC(
-            max_depth=7,
+            max_depth=5,
             n_estimators=20
         )
         gbc.fit(data_train_os[0], target_train_os)
@@ -198,8 +199,8 @@ def ensemble_fit_val():
 
         model_args = {
             'epochs': 35,
-            'batch_size': 8192,
-            'lstm_gpu': True,
+            'batch_size': 1024,
+            'lstm_gpu': False,
             'sequence_dense_layers': 0,
             'sequence_dense_width': 8,
             'sequence_l2_reg': 0,
@@ -230,9 +231,7 @@ def ensemble_fit_val():
 
         # use logistic regression built-in scoring method to score out of sample accuracy
         scores[j] = lr.score(train_results, target_train.values)
-
-        # results = pd.DataFrame(np.concatenate([val_results, y.reshape(-1, 1), target_val.values.reshape(-1, 1)], axis=1))
-        # results.to_csv('data/results.csv')
+        cm = confusion_matrix(target_val, y)
 
         results_path = 'data/results/results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
         results = pd.DataFrame({'TARGET': target_val.values, 'PREDICTION': y})
@@ -383,6 +382,6 @@ def multi_lstm_grid_search():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
     file = 'data/results/raw_results20180819_044627.csv'
-    dtc_grid_search()
+    gbc_grid_search()
     # ensemble_val_from_file(file)
     # ensemble_fit_val()
