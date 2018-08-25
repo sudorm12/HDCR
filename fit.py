@@ -7,7 +7,7 @@ from prepare_data import HCDRDataLoader
 from sklearn.linear_model import LogisticRegression
 from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import KFold
-from models import DenseNN, GBC, ABC, MultiLSTMWithMetadata
+from models import DenseNN, GBC, ABC, DTC, MultiLSTMWithMetadata
 from grid_search import grid_search
 from sklearn.svm import LinearSVC
 from sklearn.metrics import confusion_matrix
@@ -353,22 +353,10 @@ def dtc_grid_search():
         'class_weight': 'balanced',
     }
 
-    loader = HCDRDataLoader(**loader_args)
-    app_ix = loader.get_index()
-
-    kf = KFold(n_splits=4, shuffle=True)
-    for j, fold_indexes in enumerate(kf.split(app_ix)):
-        pass
-
-    # load training and test data
-    data_train, target_train, data_val, target_val = loader.load_train_val(fold_indexes[0], fold_indexes[1])
-
-    dtc = DecisionTreeClassifier(**model_args)
-    dtc.fit(data_train, target_train)
-
-    logging.debug(dtc.score(data_val, target_val))
-    logging.debug(confusion_matrix(target_val, dtc.predict(data_val)))
-
+    grid_search(DTC, HCDRDataLoader,
+                hp_file='dtc_grid_params.txt',
+                loader_args=loader_args, model_args=model_args,
+                random_oversample=True)
 
 
 def multi_lstm_grid_search():

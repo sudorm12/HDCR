@@ -2,6 +2,7 @@ from keras.models import Sequential, Model
 from keras.layers import CuDNNLSTM, LSTM, Dense, Dropout, Input, Reshape, concatenate
 from keras.regularizers import l2
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
+from sklearn.tree import DecisionTreeClassifier
 
 
 class DenseNN:
@@ -56,6 +57,17 @@ class ABC:
     def __init__(self, input_shape=None, n_estimators=10, learning_rate=1):
         self._model = AdaBoostClassifier(n_estimators=n_estimators,
                                          learning_rate=learning_rate)
+
+    def fit(self, data_train, target_train, validation_data=None):
+        self._model.fit(data_train, target_train)
+
+    def predict(self, data):
+        return self._model.predict_proba(data)[:, 1]
+
+
+class DTC:
+    def __init__(self, input_shape=None, class_weight='balanced', min_samples_split=2):
+        self._model = DecisionTreeClassifier(class_weight=class_weight, min_samples_split=min_samples_split)
 
     def fit(self, data_train, target_train, validation_data=None):
         self._model.fit(data_train, target_train)
