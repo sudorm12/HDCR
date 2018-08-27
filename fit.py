@@ -235,8 +235,8 @@ def ensemble_fit_val():
         vlr.fit(val_results - 0.5, target_val.values)
         coefs[j, :] = vlr.coef_[0]
         coefs_path = 'data/results/ensemble_coef_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
-        coefs = pd.DataFrame(coefs)
-        coefs.to_csv(coefs_path)
+        coefs_df = pd.DataFrame(coefs)
+        coefs_df.to_csv(coefs_path)
 
         results_path = 'data/results/results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
         results = pd.DataFrame({'TARGET': target_val.values, 'PREDICTION': y})
