@@ -1,6 +1,5 @@
 import logging
 from datetime import datetime
-import itertools
 import numpy as np
 import pandas as pd
 from prepare_data import HCDRDataLoader
@@ -10,8 +9,6 @@ from sklearn.model_selection import KFold
 from models import DenseNN, GBC, ABC, DTC, MultiLSTMWithMetadata
 from grid_search import grid_search
 from sklearn.svm import LinearSVC
-from sklearn.metrics import confusion_matrix
-from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import confusion_matrix
 
 
@@ -60,8 +57,10 @@ def ensemble_fit_predict():
     # gradient boosting classifier
     logging.debug('Training gradient boosting classifier')
     gbc = GBC(
-        max_depth=7,
-        n_estimators=20
+        max_depth=5,
+        n_estimators=30,
+        min_samples_split=0.01,
+        learning_rate=0.3
     )
     gbc.fit(data_train_os[0], target_train_os)
 
@@ -177,7 +176,9 @@ def ensemble_fit_val():
         logging.debug('Training gradient boosting classifier')
         gbc = GBC(
             max_depth=5,
-            n_estimators=20
+            n_estimators=30,
+            min_samples_split=0.01,
+            learning_rate=0.3
         )
         gbc.fit(data_train_os[0], target_train_os)
 
@@ -191,9 +192,6 @@ def ensemble_fit_val():
             learning_rate=1.0
         )
         abc.fit(data_train_os[0], target_train_os)
-
-        # TODO: try sklearn.svm.SVC or sklearn.svm.LinearSVC classifier
-        # TODO: try sklearn.tree.DecisionTreeClassifier
 
         train_results[:, 2] = abc.predict(data_train[0]).squeeze()
         val_results[:, 2] = abc.predict(data_val[0]).squeeze()
@@ -224,7 +222,6 @@ def ensemble_fit_val():
         train_results[:, 3] = lstm_nn.predict(data_train).squeeze()
         val_results[:, 3] = lstm_nn.predict(data_val).squeeze()
 
-        # TODO: try subtracting 0.5 from results before fitting logistic regression
         lr = LogisticRegression(class_weight='balanced', C=0.1, fit_intercept=False)
         lr.fit(train_results - 0.5, target_train.values)
 
@@ -236,7 +233,7 @@ def ensemble_fit_val():
 
         vlr = LogisticRegression(class_weight='balanced', C=0.1, fit_intercept=False)
         vlr.fit(val_results - 0.5, target_val.values)
-        coefs[j, :] = vlr.coef_
+        coefs[j, :] = vlr.coef_[0]
         coefs_path = 'data/results/ensemble_coef_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
         coefs = pd.DataFrame(coefs)
         coefs.to_csv(coefs_path)
@@ -380,6 +377,6 @@ def multi_lstm_grid_search():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
     file = 'data/results/raw_results20180819_044627.csv'
-    gbc_grid_search()
+    # gbc_grid_search()
     # ensemble_val_from_file(file)
-    # ensemble_fit_val()
+    ensemble_fit_val()
