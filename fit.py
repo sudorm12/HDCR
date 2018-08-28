@@ -81,7 +81,6 @@ def ensemble_fit_predict():
 
     # multi lstm network with metadata
     logging.debug('Training multi lstm nn')
-
     model_args = {
         'epochs': 35,
         'batch_size': 8192,
@@ -381,4 +380,5 @@ if __name__ == "__main__":
     file = 'data/results/raw_results20180819_044627.csv'
     # gbc_grid_search()
     # ensemble_val_from_file(file)
-    ensemble_fit_val()
+    # ensemble_fit_val()
+    ensemble_fit_predict()
