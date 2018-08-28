@@ -3,6 +3,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 from prepare_data import HCDRDataLoader
+from scipy.stats import logistic
 from sklearn.linear_model import LogisticRegression
 from imblearn.over_sampling import RandomOverSampler
 from sklearn.model_selection import KFold
@@ -107,11 +108,12 @@ def ensemble_fit_predict():
     train_results[:, 3] = lstm_nn.predict(data_train).squeeze()
     val_results[:, 3] = lstm_nn.predict(data_val).squeeze()
 
-    # TODO: try voting classifier instead of logistic regression
-    lr = LogisticRegression(class_weight='balanced', C=0.1, fit_intercept=False)
-    lr.fit(train_results, target_train.values)
+    # lr = LogisticRegression(class_weight='balanced', C=0.1, fit_intercept=False)
+    # lr.fit(train_results, target_train.values)
+    # y = lr.predict(val_results)
 
-    y = lr.predict(val_results)
+    weights = np.array([1.7, 3.0, 0.75, 0.35])
+    y = logistic.cdf(np.dot(val_results - 0.5, weights))
 
     results_path = 'data/results/results_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
     results = pd.DataFrame({'SK_ID_CURR': loader.get_test_index().values, 'TARGET': y}).set_index('SK_ID_CURR')
@@ -233,7 +235,7 @@ def ensemble_fit_val():
 
         vlr = LogisticRegression(class_weight='balanced', C=0.1, fit_intercept=False)
         vlr.fit(val_results - 0.5, target_val.values)
-        coefs[j, :] = vlr.coef_[0]
+        coefs[j, :] = vlr.coef_.squeeze()
         coefs_path = 'data/results/ensemble_coef_{:%Y%m%d_%H%M%S}.csv'.format(datetime.now())
         coefs_df = pd.DataFrame(coefs)
         coefs_df.to_csv(coefs_path)
