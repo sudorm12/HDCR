@@ -1,6 +1,6 @@
-from keras.models import Sequential, Model
-from keras.layers import CuDNNLSTM, LSTM, Dense, Dropout, Input, Reshape, concatenate
-from keras.regularizers import l2
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.layers import LSTM, Dense, Dropout, Input, Reshape, concatenate #CuDNNLSTM, 
+from tensorflow.keras.regularizers import l2
 from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
 from sklearn.tree import DecisionTreeClassifier
 
